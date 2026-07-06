@@ -1,5 +1,7 @@
 # 임무: Loop Harness — 범용 루프 엔지니어링 Claude Code 플러그인 구축 (v3.4.4 최종)
 
+[English](mission-v3.4.4.en.md) | [**한국어**](mission-v3.4.4.md)
+
 아래 전체를 복사해서 Claude Code에 붙여넣으세요.
 
 **v3.4.3 → v3.4.4 변경 요지:** 실증 검토 반영 3건 (Claude Code v2.1.201 실측 기준) — ① 도그푸딩 permission mode 정정: headless(`-p`)에서는 권한 프롬프트를 띄울 수 없어 `acceptEdits`로는 **모든 Bash 도구 호출이 거부됨**(실측 — 루프의 test 실행·verifier 채점·스모크 체크 전부 불가. 스모크 ②는 권한 계층 거부가 guard deny로 오판되는 위양성까지 발생) → `--permission-mode bypassPermissions`로 교체(일회용 도그푸딩 프로젝트 한정). hook의 deny는 permission mode와 독립적으로 발화함이 실측 확인되어 스모크 ②의 판정 전제는 유지 ② verifier_guard 폴백 트리거 확장 — "`agent_type` 필드 부재"만 정의돼 있던 것을 "필드는 존재하나 값 불일치(deny 미발화가 디버그 로그로 실증, 매칭 문자열 조정 1회 재시도 후)"까지 포함: 값 불일치 환경에서 수용 기준(실차단/필드 부재 폴백)의 어느 분기도 성립하지 않아 교착하던 경로 제거. 수용 기준·스모크 ②·README 한계 문구 동기화 ③ `--verify-only` read-only 보장 문구를 "잔존 marker 없는 신선한 세션 기준"으로 한정 — 동일 세션에 marker가 잔존하면 verify-only 턴 종료도 판정 4에 도달해 `.last-usage`가 갱신되므로 "state.md 1줄이 유일한 예외" 문구가 자기모순이었음(메커니즘 불변 — 보장 대상을 지속 파일(커밋 대상)로 정의하고 숨김 임시 파일은 범위 밖으로 명시). 설계 구조 변경 없음(신규 파일·hook 이벤트 추가 없음).
