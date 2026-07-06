@@ -2,7 +2,12 @@
 
 **English** | [한국어](README.ko.md)
 
-A Claude Code plugin for loop engineering: implement→verify cycles with machine-verifiable stop conditions, an independent read-only verifier, and disk-based state that survives session death.
+[![License: MIT](https://img.shields.io/github/license/hhamja/loop-harness)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/hhamja/loop-harness)](https://github.com/hhamja/loop-harness/releases)
+
+**Your agent says "done." This plugin makes it prove it.**
+
+loop-harness is a Claude Code plugin for loop engineering: it runs implement→verify cycles and refuses to accept "done" until a machine-verifiable rubric passes — graded by an independent read-only verifier, with disk-based state that survives session death.
 
 Design invariant: **the plugin is immutable logic** (install once per machine); **all mutable state lives in `.claude/loop/`** (created once per project by `loop-init`).
 

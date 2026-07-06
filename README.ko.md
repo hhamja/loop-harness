@@ -2,7 +2,12 @@
 
 [English](README.md) | **한국어**
 
-루프 엔지니어링을 위한 Claude Code 플러그인: 기계 검증 가능한 정지 조건을 갖춘 구현→검증 사이클, 독립된 읽기 전용 verifier, 세션이 죽어도 살아남는 디스크 기반 상태.
+[![License: MIT](https://img.shields.io/github/license/hhamja/loop-harness)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/hhamja/loop-harness)](https://github.com/hhamja/loop-harness/releases)
+
+**에이전트는 "다 됐다"고 말합니다. 이 플러그인은 그걸 증명하게 만듭니다.**
+
+loop-harness는 루프 엔지니어링을 위한 Claude Code 플러그인입니다: 구현→검증 사이클을 돌리고, 기계 검증 가능한 rubric이 통과하기 전까지 "완료"를 인정하지 않습니다 — 독립된 읽기 전용 verifier가 채점하며, 디스크 기반 상태는 세션이 죽어도 살아남습니다.
 
 설계 불변식: **플러그인은 불변 로직**(머신당 1회 설치); **모든 가변 상태는 `.claude/loop/`에 존재**(`loop-init`이 프로젝트당 1회 생성).
 
