@@ -373,6 +373,66 @@ test_auto_push() {
   rm -rf "$tmp"
 }
 
+# ── auto_commit.sh: Stop hook that commits leftover work-branch changes ──
+# DRYRUN seam prints "WOULD: git commit ..." instead of committing.
+autocommit() { printf '%s' "$1" | LOOP_AUTOCOMMIT_DRYRUN=1 bash "$SCRIPTS/auto_commit.sh"; }
+
+test_auto_commit() {
+  printf '\nauto_commit.sh\n'
+  local tmp out before after
+
+  # guard 1: not a loop project
+  tmp="$(mktemp -d)"
+  out="$(autocommit "$(printf '{"cwd":"%s"}' "$tmp")")"
+  assert_empty "$out" "no loop dir: no commit"
+  rm -rf "$tmp"
+
+  # guard 2: stop_hook_active (already re-prompting)
+  tmp="$(mktemp -d)"; mk_repo "$tmp" "feature/x"; echo dirty > "$tmp/work/f2"
+  out="$(autocommit "$(printf '{"cwd":"%s/work","stop_hook_active":true}' "$tmp")")"
+  assert_empty "$out" "stop_hook_active: no commit"
+  rm -rf "$tmp"
+
+  # guard 3: auto_commit disabled
+  tmp="$(mktemp -d)"; mk_repo "$tmp" "feature/x"; echo dirty > "$tmp/work/f2"
+  printf 'auto_commit: false\n' > "$tmp/work/.claude/loop/loop.config.md"
+  out="$(autocommit "$(printf '{"cwd":"%s/work"}' "$tmp")")"
+  assert_empty "$out" "auto_commit=false: no commit"
+  rm -rf "$tmp"
+
+  # guard 5: clean tree -> nothing to commit
+  tmp="$(mktemp -d)"; mk_repo "$tmp" "feature/x"
+  out="$(autocommit "$(printf '{"cwd":"%s/work"}' "$tmp")")"
+  assert_empty "$out" "clean tree: no commit"
+  rm -rf "$tmp"
+
+  # dirty work branch -> would commit (untracked file staged by add -A)
+  tmp="$(mktemp -d)"; mk_repo "$tmp" "feature/x"; echo dirty > "$tmp/work/f2"
+  out="$(autocommit "$(printf '{"cwd":"%s/work"}' "$tmp")")"
+  assert_contains "$out" "WOULD: git commit" "dirty branch: would commit"
+  rm -rf "$tmp"
+
+  # local commit is T0 even on a protected branch (direct-to-main workflow)
+  tmp="$(mktemp -d)"; mk_repo "$tmp" "main"; echo dirty > "$tmp/work/f2"
+  out="$(autocommit "$(printf '{"cwd":"%s/work"}' "$tmp")")"
+  assert_contains "$out" "WOULD: git commit" "protected branch: still commits (push is what's gated)"
+  rm -rf "$tmp"
+
+  # real run (no dryrun): a new commit lands and the tree goes clean.
+  # loop projects gitignore .claude/loop/.* (loop-init), so the hook's own
+  # .last-commit log stays out of the tree — mirror that here.
+  tmp="$(mktemp -d)"; mk_repo "$tmp" "feature/x"
+  printf '.claude/loop/.*\n' > "$tmp/work/.gitignore"
+  ( cd "$tmp/work" && git add .gitignore && git commit -qm ignore )
+  echo dirty > "$tmp/work/f2"
+  before="$(git -C "$tmp/work" rev-list --count HEAD)"
+  printf '{"cwd":"%s/work"}' "$tmp" | bash "$SCRIPTS/auto_commit.sh" >/dev/null 2>&1
+  after="$(git -C "$tmp/work" rev-list --count HEAD)"
+  assert_exit "$((before + 1))" "$after" "real run: exactly one new commit"
+  assert_empty "$(git -C "$tmp/work" status --porcelain)" "real run: tree is clean after commit"
+  rm -rf "$tmp"
+}
+
 test_verifier_guard
 test_decision_gate
 test_stop_gate
@@ -380,6 +440,7 @@ test_budget
 test_gen_ci
 test_drive_next
 test_auto_push
+test_auto_commit
 
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

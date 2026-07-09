@@ -27,13 +27,18 @@ Default gate boundary is the **merge/release line**, not the push line: pushing 
 ```markdown
 protected_branches: main master   # push targeting these is T2 (default: main master)
 gate_push: false                  # true = every git push is T2 (direct-to-main repos)
+auto_commit: true                 # true (default) = Stop hook commits leftover work at turn end
 auto_push: true                   # true (default) = Stop hook auto-pushes the work branch
 extra_gates:                      # optional grep -E regex for project-specific T2 (e.g. external endpoints, paid builds)
 ```
 
 The hook is scoped to loop projects only (a cwd with `.claude/loop/`); it never touches general git use elsewhere.
 
-`scripts/auto_push.sh` (Stop hook) is the **active complement** to the block: at turn end inside a loop project it pushes the current work branch — the T0 rule "act autonomously, never re-ask" made mechanical, so a human never has to say "and push it". It never pushes a `protected_branches` branch (that stays a human gate), stands down when `gate_push: true`, never force-pushes or pushes tags, and logs any failure to `.claude/loop/.last-push` without ever blocking the turn. Opt out with `auto_push: false`.
+Two Stop-hook scripts are the **active complement** to the block — the T0 rule "act autonomously, never re-ask" made mechanical for the two steps a human should never have to prompt:
+
+`scripts/auto_commit.sh` runs first: if the work tree has uncommitted changes it commits them (`git add -A`) with a generic backstop message, so a turn never ends with verified work left uncommitted. It is NOT gated on `protected_branches`/`gate_push` — a local commit is unconditionally T0 (undo with `git reset`), including on `main` in a direct-to-main repo where the workflow is "commit locally, human gates the push". The primary path is still the agent committing inline with a written message; this hook only fires when it didn't. Opt out with `auto_commit: false`. Commit failure logs to `.claude/loop/.last-commit` and never blocks the turn.
+
+`scripts/auto_push.sh` runs next: it pushes the current work branch so a human never has to say "and push it". It never pushes a `protected_branches` branch (that stays a human gate), stands down when `gate_push: true`, never force-pushes or pushes tags, and logs any failure to `.claude/loop/.last-push` without ever blocking the turn. Opt out with `auto_push: false`.
 
 ## Passing a gate (the one-shot marker)
 

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.0 — 2026-07-10
+
+- `auto_commit.sh` (new Stop hook): the mechanical complement of `auto_push.sh` for the other half of the T0 rule "local commits → act autonomously, never re-ask". `auto_push` pushes an existing commit; if the agent left verified work uncommitted, there was nothing to push and a human still got asked "shall I commit?" — a doctrine violation. The new hook runs first in the Stop chain and, on a work tree with changes, commits them (`git add -A`) with a generic backstop message, then `auto_push` pushes. The agent committing inline with a written message stays the primary path; the hook only fires when it didn't. Unlike push, it is NOT gated on `protected_branches`/`gate_push` — a local commit is unconditionally T0 (undo with `git reset`), which is exactly the direct-to-main workflow "commit locally, human gates the push". Opt out with `auto_commit: false` in `loop.config.md`; commit failure logs to `.claude/loop/.last-commit` and never blocks the turn. Covered by new `tests/run.sh` cases (guards + a real-commit assertion); documented in `decision-gates.md` and the loop-init config template.
+
 ## 0.7.0 — 2026-07-10
 
 - `loop-diagnose` renamed to `loop-review` and upgraded from a single-agent diagnosis into an orchestrated review: the main agent fans out read-only reviewers — `loop-architect` (ETCLOVG coverage + L0–L5 maturity) and the new `design-critic` (adversarial red-team) — then independently reproduces the critic's exploitable findings before synthesizing one report. Invocation is now `/loopy:loop-review [path]` (was `/loopy:loop-diagnose`); the report file is `harness-review.md` (was `harness-diagnosis.md`).
