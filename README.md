@@ -73,7 +73,7 @@ Loops, verifiers and subagents consume tokens — always weigh cost against the 
 
 ## `.claude/loop/` commit policy
 
-Commit everything except hidden temp files. `loop-init` adds `.claude/loop/.*` to your `.gitignore` (covers `.run-marker`, `.last-usage`, `.hook-debug.log`, and the Codex I/O files `.codex-prompt`, `.codex-last`, `.codex-log`); the visible files — goal, rubric, state, memory, review, config — are meant to be committed for team sharing and session recovery.
+Commit everything except hidden temp files. `loop-init` adds `.claude/loop/.*` to your `.gitignore` (covers `.run-marker`, `.last-usage`, `.last-push`, `.hook-debug.log`, and the Codex I/O files `.codex-prompt`, `.codex-last`, `.codex-log`); the visible files — goal, rubric, state, memory, review, config — are meant to be committed for team sharing and session recovery.
 
 ## Known limitations
 

@@ -290,12 +290,87 @@ test_drive_next() {
   rm -rf "$tmp"
 }
 
+# ── auto_push.sh: Stop hook that pushes the current work branch at turn end ──
+# DRYRUN seam prints "WOULD: git ..." instead of pushing; git fixtures use a bare origin.
+autopush() { printf '%s' "$1" | LOOP_AUTOPUSH_DRYRUN=1 bash "$SCRIPTS/auto_push.sh"; }
+
+# bare origin + work clone on branch $2 with one commit; .claude/loop present, no upstream.
+mk_repo() {
+  git init -q --bare "$1/origin.git"
+  git clone -q "$1/origin.git" "$1/work" 2>/dev/null
+  (
+    cd "$1/work" || exit
+    git config user.email t@t.co; git config user.name tester
+    git checkout -q -B "$2"
+    mkdir -p .claude/loop
+    echo one > f1; git add f1; git commit -qm c1
+  )
+}
+
+test_auto_push() {
+  printf '\nauto_push.sh\n'
+  local tmp out
+
+  # guard 1: not a loop project
+  tmp="$(mktemp -d)"
+  out="$(autopush "$(printf '{"cwd":"%s","session_id":"S1"}' "$tmp")")"
+  assert_empty "$out" "no loop dir: no push"
+  rm -rf "$tmp"
+
+  # guard 2: stop_hook_active (already re-prompting)
+  tmp="$(mktemp -d)"; mkdir -p "$tmp/.claude/loop"
+  out="$(autopush "$(printf '{"cwd":"%s","session_id":"S1","stop_hook_active":true}' "$tmp")")"
+  assert_empty "$out" "stop_hook_active: no push"
+  rm -rf "$tmp"
+
+  # guard 3: auto_push disabled
+  tmp="$(mktemp -d)"; mkdir -p "$tmp/.claude/loop"
+  printf 'auto_push: false\n' > "$tmp/.claude/loop/loop.config.md"
+  out="$(autopush "$(printf '{"cwd":"%s","session_id":"S1"}' "$tmp")")"
+  assert_empty "$out" "auto_push=false: no push"
+  rm -rf "$tmp"
+
+  # guard 4: gate_push=true -> every push is a T2 gate, auto-push must stand down
+  tmp="$(mktemp -d)"; mkdir -p "$tmp/.claude/loop"
+  printf 'gate_push: true\n' > "$tmp/.claude/loop/loop.config.md"
+  out="$(autopush "$(printf '{"cwd":"%s","session_id":"S1"}' "$tmp")")"
+  assert_empty "$out" "gate_push=true: no push"
+  rm -rf "$tmp"
+
+  # guard 7a: work branch, no upstream, origin exists -> first push with -u
+  tmp="$(mktemp -d)"; mk_repo "$tmp" "feature/x"
+  out="$(autopush "$(printf '{"cwd":"%s/work","session_id":"S1"}' "$tmp")")"
+  assert_contains "$out" "WOULD: git push -u origin feature/x" "no upstream: push -u origin branch"
+  rm -rf "$tmp"
+
+  # guard 7b: upstream set, branch ahead -> plain push
+  tmp="$(mktemp -d)"; mk_repo "$tmp" "feature/x"
+  ( cd "$tmp/work" && git push -q -u origin feature/x && echo two > f2 && git add f2 && git commit -qm c2 ) >/dev/null 2>&1
+  out="$(autopush "$(printf '{"cwd":"%s/work","session_id":"S1"}' "$tmp")")"
+  assert_contains "$out" "WOULD: git push" "upstream + ahead: git push"
+  rm -rf "$tmp"
+
+  # guard 7c: upstream set, not ahead -> nothing to push
+  tmp="$(mktemp -d)"; mk_repo "$tmp" "feature/x"
+  ( cd "$tmp/work" && git push -q -u origin feature/x ) >/dev/null 2>&1
+  out="$(autopush "$(printf '{"cwd":"%s/work","session_id":"S1"}' "$tmp")")"
+  assert_empty "$out" "upstream + not ahead: no push"
+  rm -rf "$tmp"
+
+  # guard 6: current branch is protected -> never auto-push
+  tmp="$(mktemp -d)"; mk_repo "$tmp" "main"
+  out="$(autopush "$(printf '{"cwd":"%s/work","session_id":"S1"}' "$tmp")")"
+  assert_empty "$out" "protected branch: no push"
+  rm -rf "$tmp"
+}
+
 test_verifier_guard
 test_decision_gate
 test_stop_gate
 test_budget
 test_gen_ci
 test_drive_next
+test_auto_push
 
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

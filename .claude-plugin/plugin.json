@@ -1,7 +1,7 @@
 {
   "name": "loop-harness",
-  "version": "0.4.0",
-  "description": "Universal loop-engineering harness: machine-verifiable stop conditions, cross-model maker/checker (Codex maker, Claude checker), disk-based loop memory, reversibility×impact decision gates that keep human approval to irreversible actions, autonomous replan on stalls, and a green gate (process audit + code review) before human merge.",
+  "version": "0.5.0",
+  "description": "Universal loop-engineering harness: machine-verifiable stop conditions, cross-model maker/checker (Codex maker, Claude checker), disk-based loop memory, reversibility×impact decision gates that keep human approval to irreversible actions while auto-pushing reversible work-branch commits, autonomous replan on stalls, and a green gate (process audit + code review) before human merge.",
   "author": {
     "name": "hhamja"
   }

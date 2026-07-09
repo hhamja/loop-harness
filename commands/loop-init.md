@@ -118,7 +118,8 @@ escalation: after 3 consecutive failures of the same criterion, replan up to rep
 
 protected_branches: main master
 gate_push: false
+auto_push: true
 extra_gates:
 ```
 
-The last three keys drive the decision gate (`decision_gate.sh`, see the loop-engineering skill's `references/decision-gates.md`): pushing to `protected_branches` — or every push when `gate_push: true` — plus release/publish/merge are treated as irreversible (T2) and require human approval; `extra_gates` is an optional `grep -E` regex for project-specific T2 commands. Absent keys fall back to these defaults, so existing loops need no change.
+`protected_branches`, `gate_push`, `extra_gates` drive the decision gate (`decision_gate.sh`, see the loop-engineering skill's `references/decision-gates.md`): pushing to `protected_branches` — or every push when `gate_push: true` — plus release/publish/merge are treated as irreversible (T2) and require human approval; `extra_gates` is an optional `grep -E` regex for project-specific T2 commands. `auto_push: true` (the default) is the active side of the same doctrine — the Stop hook (`auto_push.sh`) pushes the current work branch at turn end so a human never has to; it never pushes a protected branch and stands down when `gate_push: true`. Absent keys fall back to these defaults, so existing loops need no change.

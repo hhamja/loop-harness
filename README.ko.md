@@ -73,7 +73,7 @@ claude --plugin-dir /absolute/path/to/loop-harness
 
 ## `.claude/loop/` 커밋 정책
 
-숨김 임시 파일을 제외하고 전부 커밋하세요. `loop-init`이 `.gitignore`에 `.claude/loop/.*`를 추가합니다(`.run-marker`, `.last-usage`, `.hook-debug.log`, 그리고 Codex I/O 파일 `.codex-prompt`, `.codex-last`, `.codex-log`를 커버); 보이는 파일들 — goal, rubric, state, memory, review, config — 은 팀 공유와 세션 복구를 위해 커밋하도록 설계되었습니다.
+숨김 임시 파일을 제외하고 전부 커밋하세요. `loop-init`이 `.gitignore`에 `.claude/loop/.*`를 추가합니다(`.run-marker`, `.last-usage`, `.last-push`, `.hook-debug.log`, 그리고 Codex I/O 파일 `.codex-prompt`, `.codex-last`, `.codex-log`를 커버); 보이는 파일들 — goal, rubric, state, memory, review, config — 은 팀 공유와 세션 복구를 위해 커밋하도록 설계되었습니다.
 
 ## 알려진 한계
 

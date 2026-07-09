@@ -27,10 +27,13 @@ Default gate boundary is the **merge/release line**, not the push line: pushing 
 ```markdown
 protected_branches: main master   # push targeting these is T2 (default: main master)
 gate_push: false                  # true = every git push is T2 (direct-to-main repos)
+auto_push: true                   # true (default) = Stop hook auto-pushes the work branch
 extra_gates:                      # optional grep -E regex for project-specific T2 (e.g. external endpoints, paid builds)
 ```
 
 The hook is scoped to loop projects only (a cwd with `.claude/loop/`); it never touches general git use elsewhere.
+
+`scripts/auto_push.sh` (Stop hook) is the **active complement** to the block: at turn end inside a loop project it pushes the current work branch — the T0 rule "act autonomously, never re-ask" made mechanical, so a human never has to say "and push it". It never pushes a `protected_branches` branch (that stays a human gate), stands down when `gate_push: true`, never force-pushes or pushes tags, and logs any failure to `.claude/loop/.last-push` without ever blocking the turn. Opt out with `auto_push: false`.
 
 ## Passing a gate (the one-shot marker)
 
