@@ -45,6 +45,9 @@ test_verifier_guard() {
   out="$(guard '{"agent_type":"loop-architect","tool_input":{"command":"cat rubric.md"}}')"
   assert_empty "$out" "architect read: allow"
 
+  out="$(guard '{"agent_type":"loopy:design-critic","tool_input":{"command":"rm -rf x"}}')"
+  assert_contains "$out" '"deny"' "design-critic rm: deny (read-only checker)"
+
   out="$(guard '{"agent_type":"verifier","tool_input":{"command":"git commit -m x"}}')"
   assert_contains "$out" '"deny"' "verifier git commit: deny"
 

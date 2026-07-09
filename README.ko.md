@@ -46,9 +46,9 @@ claude --plugin-dir /absolute/path/to/loopy
 2. `/loopy:loop-run --once` — 정확히 한 번의 구현+검증 사이클 후 정지.
 3. `/loopy:loop-run` — 전체 루프. 안전 장치 포함: `max_iterations` 상한(기본 10)과 동일 기준 3회 연속 실패 시 에스컬레이션.
 
-## 기존 하네스 진단
+## 기존 하네스 리뷰
 
-`/loopy:loop-diagnose [경로]`는 임의의 프로젝트의 에이전트/루프 하네스를 제어 평면(`docs/loop-control-plane.md`) 기준으로 진단합니다 — `.claude/loop/`가 없어도 됩니다. 읽기 전용 `loop-architect` 서브에이전트가 ETCLOVG 7책임(Execution, Tooling, Context, Lifecycle, Observability, Verification, Governance)을 증거 인용과 함께 채점하고 성숙도 레벨(L0–L5)을 매기면, 메인 에이전트가 시공 순서로 정렬된 우선 수정안과 함께 `harness-diagnosis.md`를 기록합니다. 초기화된 루프의 *프로세스*를 채점하는 `loop-audit`와 달리, 이쪽은 하네스 *아키텍처가 애초에 존재하는지*를 진단합니다.
+`/loopy:loop-review [경로]`는 임의의 프로젝트의 에이전트/루프 하네스를 제어 평면(`docs/loop-control-plane.md`) 기준으로 리뷰합니다 — `.claude/loop/`가 없어도 됩니다. 메인 에이전트가 오케스트레이터로서 읽기 전용 리뷰어들을 팬아웃합니다 — ETCLOVG 7책임(Execution, Tooling, Context, Lifecycle, Observability, Verification, Governance)을 증거 인용과 성숙도 레벨(L0–L5)로 채점하는 `loop-architect`, 그리고 게이트 우회·승인 마커 위조·rubber-stamp를 적대적으로 파고드는 `design-critic` — 그다음 critic의 악용 가능한 발견을 직접 재현해 확인한 뒤, 시공 순서로 정렬된 우선 수정안과 함께 `harness-review.md`를 기록합니다. 초기화된 루프의 *프로세스*를 채점하는 `loop-audit`와 달리, 이쪽은 하네스 *아키텍처가 존재하는지와 게이트가 실제로 버티는지*를 리뷰합니다.
 
 ## 교차 모델 maker/checker (Codex)
 

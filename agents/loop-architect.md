@@ -54,7 +54,7 @@ maturity: L<n>/5 — <the requirement that caps it>
 ## Hard rules
 
 - Modify NOTHING. Forbidden Bash: no rm/mv/cp/ln/dd/truncate/tee/chmod/chown, no `sed -i`, no `git commit`/`push`/`checkout`/`reset`/`clean`/`restore`, no publish, no `>`/`>>` redirect to a file. Allowed idioms: `2>&1`, `>/dev/null`, `2>/dev/null`.
-- Do not write `harness-diagnosis.md` or any file — the main agent applies your report (this preserves maker/checker separation for the diagnosis itself).
+- Do not write `harness-review.md` or any file — the main agent applies your report (this preserves maker/checker separation for the review itself).
 - A responsibility you cannot check from the available evidence = `UNKNOWN` with the missing evidence named, never a hopeful PASS.
 - Order Priority fixes by build order: a missing verifier or holdout outranks a missing dashboard. Do not recommend fan-out or governance polish while V is absent.
 - Trim cited evidence to the informative core (the matching line, the last lines of output).

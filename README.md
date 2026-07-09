@@ -46,9 +46,9 @@ You don't have to run the full loop on day one:
 2. `/loopy:loop-run --once` — exactly one implement+verify cycle, then stop.
 3. `/loopy:loop-run` — the full loop, with safety rails: `max_iterations` cap (default 10) and escalation after 3 consecutive failures of the same criterion.
 
-## Diagnose an existing harness
+## Review an existing harness
 
-`/loopy:loop-diagnose [path]` inspects any project's agent/loop harness against the control plane (`docs/loop-control-plane.md`) — no `.claude/loop/` required. A read-only `loop-architect` subagent scores the seven ETCLOVG responsibilities (Execution, Tooling, Context, Lifecycle, Observability, Verification, Governance) with cited evidence and a maturity level (L0–L5), then the main agent writes `harness-diagnosis.md` with build-order-ranked priority fixes. Unlike `loop-audit` (which grades an initialized loop's *process*), this diagnoses whether the harness *architecture* exists at all.
+`/loopy:loop-review [path]` reviews any project's agent/loop harness against the control plane (`docs/loop-control-plane.md`) — no `.claude/loop/` required. As orchestrator, the main agent fans out read-only reviewers — a `loop-architect` that scores the seven ETCLOVG responsibilities (Execution, Tooling, Context, Lifecycle, Observability, Verification, Governance) with cited evidence and a maturity level (L0–L5), and a `design-critic` that adversarially red-teams the harness (gate bypasses, forgeable approvals, rubber-stamps) — then independently reproduces the critic's exploitable findings before writing `harness-review.md` with build-order-ranked priority fixes. Unlike `loop-audit` (which grades an initialized loop's *process*), this reviews whether the harness *architecture* exists and whether its gates actually hold.
 
 ## Cross-model maker/checker (Codex)
 

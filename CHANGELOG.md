@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.0 — 2026-07-10
+
+- `loop-diagnose` renamed to `loop-review` and upgraded from a single-agent diagnosis into an orchestrated review: the main agent fans out read-only reviewers — `loop-architect` (ETCLOVG coverage + L0–L5 maturity) and the new `design-critic` (adversarial red-team) — then independently reproduces the critic's exploitable findings before synthesizing one report. Invocation is now `/loopy:loop-review [path]` (was `/loopy:loop-diagnose`); the report file is `harness-review.md` (was `harness-diagnosis.md`).
+- New `design-critic` read-only subagent (`agents/design-critic.md`): framed to REFUTE compliance claims — gate bypasses, forgeable approvals, rubber-stamps, script bugs — reporting CONFIRMED/PLAUSIBLE/REFUTED holes. This supplies the doctrine's §3.3 incentive asymmetry (adversarial framing) that a single rubric-grader lacks.
+- `verifier_guard.sh` now also guards any `*critic*` agent — the read-only checkers are verifier, auditor, architect, critic, all blocked from write-capable Bash; covered by a new `tests/run.sh` case.
+
 ## 0.6.1 — 2026-07-09
 
 - Command→skill migration completed: `loop-init`, `loop-run`, `loop-status`, `loop-audit`, `loop-ci` moved from `commands/*.md` to `skills/<name>/SKILL.md`. They already resolved as `/loopy:<name>`, so invocation is unchanged; this aligns the repo with the project convention that `commands/` is legacy and every feature is a Skill.

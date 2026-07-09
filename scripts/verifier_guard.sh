@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # loopy verifier guard (PreToolUse hook, matcher: Bash).
 #
-# Scope: acts ONLY when the hook input's agent_type contains "verifier", "auditor", or
-# "architect" (partial match — survives namespace prefixes like "loopy:verifier").
+# Scope: acts ONLY when the hook input's agent_type contains "verifier", "auditor",
+# "architect", or "critic" (partial match — survives namespace prefixes like "loopy:verifier").
 # A missing agent_type field, a non-matching value, or any parse doubt -> allow (fail-open).
 # The main agent and every other agent are NEVER blocked here.
 #
@@ -34,7 +34,7 @@ else
 fi
 
 case "$AGENT_TYPE" in
-  *verifier*|*auditor*|*architect*) : ;;   # inspect below (all read-only checkers)
+  *verifier*|*auditor*|*architect*|*critic*) : ;;   # inspect below (all read-only checkers)
   *) exit 0 ;;                             # fail-open: missing field or other agent -> never block
 esac
 

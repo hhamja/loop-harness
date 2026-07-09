@@ -1,7 +1,7 @@
 {
   "name": "loopy",
-  "version": "0.6.1",
-  "description": "Universal loop-engineering harness: machine-verifiable stop conditions, cross-model maker/checker (Codex maker, Claude checker), disk-based loop memory, reversibility×impact decision gates that keep human approval to irreversible actions while auto-pushing reversible work-branch commits, autonomous replan on stalls, a green gate (process audit + code review) before human merge, and a control-plane harness diagnosis (loop-diagnose) that scores any project's ETCLOVG coverage and maturity.",
+  "version": "0.7.0",
+  "description": "Universal loop-engineering harness: machine-verifiable stop conditions, cross-model maker/checker (Codex maker, Claude checker), disk-based loop memory, reversibility×impact decision gates that keep human approval to irreversible actions while auto-pushing reversible work-branch commits, autonomous replan on stalls, a green gate (process audit + code review) before human merge, and a control-plane harness review (loop-review) that scores any project's ETCLOVG coverage and maturity with an adversarial red-team pass.",
   "author": {
     "name": "hhamja"
   }
