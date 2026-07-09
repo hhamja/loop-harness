@@ -8,6 +8,9 @@
 - One-shot approval marker `.claude/loop/.gate-approved` (action class + session + 15-min TTL, gitignored): the main agent writes it only after explicit human approval, retries the gated command, then removes it.
 - `loop-audit` (new command) + `auditor` (new read-only subagent): audit the loop *process* — maker/checker separation, machine-verifiable stops, disk-memory discipline, and gate adherence (over-/under-confirmation) — and write a scored report to `audit.md`. Complements the product-grading verifier.
 - `verifier_guard.sh` now also guards the `auditor` agent (both are read-only checkers).
+- `loop-ci` (new command) + `gen_ci.sh`: scaffold a GitHub Actions CI workflow from the loop's detected test/lint/build (a pure, golden-tested generator; node stacks for now).
+- CI/CD for this repo: `ci.yml` (shellcheck + `bash -n` + jq manifest validation + `tests/run.sh`) on push/PR; `release.yml` cuts a GitHub Release from the matching CHANGELOG section when a `v*` tag is pushed.
+- `.gitignore` for OS/editor files and loop runtime artifacts (`.run-marker`, `.gate-approved`, codex logs, …).
 
 ## 0.2.0 — 2026-07-07
 

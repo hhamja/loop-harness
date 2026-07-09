@@ -7,7 +7,7 @@
     {
       "name": "loop-harness",
       "source": "./",
-      "description": "Universal loop-engineering harness: machine-verifiable stop conditions, cross-model maker/checker (Codex maker, Claude checker), disk-based loop memory."
+      "description": "Universal loop-engineering harness: machine-verifiable stop conditions, cross-model maker/checker (Codex maker, Claude checker), disk-based loop memory, and reversibility×impact decision gates that keep human approval to irreversible actions."
     }
   ]
 }

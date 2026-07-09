@@ -58,6 +58,7 @@ secrets/
 .claude/loop/.codex-prompt
 .claude/loop/.codex-last
 .claude/loop/.codex-log
+.claude/loop/.gate-approved
 
 # ── 언어 도구 산출물 (도구 도입 시 대비) ───────────────
 node_modules/
