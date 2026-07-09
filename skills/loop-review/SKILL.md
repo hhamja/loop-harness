@@ -1,7 +1,7 @@
 ---
 name: loop-review
-description: Comprehensively review a project's loop/harness engineering against the control plane — ETCLOVG coverage, maturity, and an adversarial red-team pass — writing a scored harness-review.md
-argument-hint: [target-path]
+description: Comprehensively review a project's loop/harness engineering against the control plane — ETCLOVG coverage, maturity, adversarial red-team — writing a scored harness-review.md; with --fix, remediate the high-severity findings on a branch via loop-run and stop at a PR
+argument-hint: [target-path] [--fix]
 disable-model-invocation: true
 ---
 
@@ -24,4 +24,8 @@ Target path (`$ARGUMENTS`): default `.`.
 3. **Synthesize (you write everything — maker≠checker for the review itself).** Merge into ONE report: an ETCLOVG table (PASS/PARTIAL/MISSING + cited evidence), `maturity: L<n>/5` with the single capping requirement, holes ranked by exploitability (CONFIRMED/PLAUSIBLE, each with repro or reason), and priority fixes in build order (§9 — enforcement holes and verifier/holdout before observability before governance polish). OVERWRITE `<path>/harness-review.md` with a one-line timestamp header. It is human-facing — commit it like `review.md`, never gitignore.
 4. **Next step.** Point at the top fix. If the target has no loop, suggest `/loopy:loop-init`.
 
-Writing one report is reversible/local (T0) — never merge, push, or publish from this skill, and change nothing under the target beyond `harness-review.md`. Safe to run anytime, including first thing in a fresh project.
+## Fix mode (`--fix`)
+
+Without `--fix` this is review-only. With `--fix`, after the review you autonomously remediate the high-severity, machine-checkable findings on a fresh review branch and stop at a PR — the human gate is the merge, nothing before it. You never fix or grade yourself: each auto-fixable finding becomes a rubric criterion whose `verify:` command is that finding's reproduction asserting the hole is now closed, and `/loopy:loop-run`'s verified maker/checker loop closes them; design-level findings are escalated into the PR, never auto-built. Full procedure: `references/fix-mode.md`.
+
+The review itself changes nothing but `harness-review.md`. Fix mode's branch, edits, commits, work-branch push, and draft PR are all reversible (T0); merging, publishing, and protected-branch/force pushes are T2 and stay mechanically blocked (`decision_gate`). Safe to run anytime, including first thing in a fresh project.

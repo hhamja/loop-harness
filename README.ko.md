@@ -48,7 +48,7 @@ claude --plugin-dir /absolute/path/to/loopy
 
 ## 기존 하네스 리뷰
 
-`/loopy:loop-review [경로]`는 임의의 프로젝트의 에이전트/루프 하네스를 제어 평면(`docs/loop-control-plane.md`) 기준으로 리뷰합니다 — `.claude/loop/`가 없어도 됩니다. 메인 에이전트가 오케스트레이터로서 읽기 전용 리뷰어들을 팬아웃합니다 — ETCLOVG 7책임(Execution, Tooling, Context, Lifecycle, Observability, Verification, Governance)을 증거 인용과 성숙도 레벨(L0–L5)로 채점하는 `loop-architect`, 그리고 게이트 우회·승인 마커 위조·rubber-stamp를 적대적으로 파고드는 `design-critic` — 그다음 critic의 악용 가능한 발견을 직접 재현해 확인한 뒤, 시공 순서로 정렬된 우선 수정안과 함께 `harness-review.md`를 기록합니다. 초기화된 루프의 *프로세스*를 채점하는 `loop-audit`와 달리, 이쪽은 하네스 *아키텍처가 존재하는지와 게이트가 실제로 버티는지*를 리뷰합니다.
+`/loopy:loop-review [경로]`는 임의의 프로젝트의 에이전트/루프 하네스를 제어 평면(`docs/loop-control-plane.md`) 기준으로 리뷰합니다 — `.claude/loop/`가 없어도 됩니다. 메인 에이전트가 오케스트레이터로서 읽기 전용 리뷰어들을 팬아웃합니다 — ETCLOVG 7책임(Execution, Tooling, Context, Lifecycle, Observability, Verification, Governance)을 증거 인용과 성숙도 레벨(L0–L5)로 채점하는 `loop-architect`, 그리고 게이트 우회·승인 마커 위조·rubber-stamp를 적대적으로 파고드는 `design-critic` — 그다음 critic의 악용 가능한 발견을 직접 재현해 확인한 뒤, 시공 순서로 정렬된 우선 수정안과 함께 `harness-review.md`를 기록합니다. 초기화된 루프의 *프로세스*를 채점하는 `loop-audit`와 달리, 이쪽은 하네스 *아키텍처가 존재하는지와 게이트가 실제로 버티는지*를 리뷰합니다. `--fix`를 붙이면 한 걸음 더 갑니다: high-severity·기계검증 가능한 발견을 `review/…` 브랜치에서 `loop-run`으로 자율 수정하고 — 각 발견의 재현이 rubric의 `verify:` 커맨드가 되어 수정이 기계로 증명되고, 리뷰어가 자기 수정을 채점하지 않습니다 — draft PR에서 정지합니다(머지는 사람 게이트로 남음). 설계급 발견은 자동으로 짓지 않고 PR로 에스컬레이트합니다.
 
 ## 교차 모델 maker/checker (Codex)
 
