@@ -256,6 +256,37 @@ LLM-judge는 반드시 **사람 라벨로 캘리브레이션**한다. LLM-facing
 
 ---
 
+## 10. Claude Code(loopy)에서의 구현
+
+§1~9는 도구 비종속 독트린이다. 이 절은 그 독트린이 **이 레포(loopy 플러그인)에서** 어떤 Claude Code 프리미티브로 구현되는지의 매핑이다 — 진단·리뷰의 **기준이 아니라 참조 구현**이다(요구사항은 §1~9와 ETCLOVG에 있고, `loop-architect`·`design-critic`는 그쪽을 채점한다). 상태: ✅ 구현 · ⚠ 부분 · ✕ 독트린만(미탑재).
+
+| 개념 (§) | loopy 프리미티브 | 상태 |
+|---|---|---|
+| 오케스트레이터 · durable state (§1·2) | 메인 에이전트(세션) + `.claude/loop/` (`goal`·`rubric`·`state`·`memory`·`review`·`loop.config`.md) | ✅ |
+| 워커/maker · 컨텍스트 격리 (§1 L2·2) | `implementer:` = Codex CLI `codex exec --full-auto`(사이클마다 fresh, resume 금지) / Claude 폴백. stdout→`.codex-log`, 메인은 `.codex-last`만 읽음 | ✅ |
+| 정찰 팬아웃 (§2) | `explorer` 서브에이전트 (haiku, read-only) | ✅ |
+| 병렬 쓰기 워커 (§2) | `git worktree` (`references/worktree-guide.md`) — 문서만, 이를 쓰는 커맨드 미탑재 | ⚠ |
+| 체커/verifier (§1 L3·3) | `verifier` 서브에이전트 (`agents/verifier.md`; fresh·read-only, `rubric.md`만 기준). 프로세스 감사 = `auditor`, 하네스 리뷰 = `loop-architect` + `design-critic`(적대적) | ✅ |
+| maker≠checker 비대칭 · 티어 (§3) | 권한 = `disallowedTools` + `verifier_guard.sh`(PreToolUse hook) · 정보 = rubric.md만 · 인센티브 = 반증 프레이밍. 티어: explorer=haiku(증명서 有), verifier/auditor/architect=기본(강한 모델) | ✅ |
+| 게이트 순서 (§4) | verifier phase gate → green gate(`auditor` + `/code-review`) → CI `.github/workflows/ci.yml` + `loop-ci` 생성 `loop-ci.yml` | ✅ |
+| 정책 게이트 (§4·7) | `decision_gate.sh` — 테스트/CI 변조·publish·protected-branch push을 테스트 실행 전 T2 하드블록 | ✅ |
+| 홀드아웃 스위트 (§4) | — (architect 성숙도 L4 상한 사유) | ✕ |
+| Eval 골든셋 게이트 (§4) | — | ✕ |
+| 결정 게이트 T0/T1/T2 (§5) | `decision_gate.sh`(T2 차단) + `auto_push.sh`(T0 work-branch push, Stop hook) + `.gate-approved` 1회용 마커(15분 TTL) | ✅ |
+| 가역성 엔지니어링 (§5: canary·flag·tombstone) | — (architect L5 상한 사유) | ✕ |
+| 서킷브레이커 (§6) | `max_iterations` 캡 + 3연속 실패 → `replan`(`replan_max`) → escalate | ✅ |
+| kill-switch (§6) | `stop_gate.sh`(state 미갱신 시 턴 차단); repo 밖 독립 kill-switch 없음 | ⚠ |
+| 부수효과 원장 (§6) | `review.md` + `.gate-approved` 프로토콜; append-only saga ledger 미탑재 (L5) | ⚠ |
+| 관측 카운터 (§6) | `.last-usage`(토큰 추정=transcript÷4) · `.last-push`; OTel 트레이스·반려율 카운터 미탑재 (L4) | ⚠ |
+| 예산 (§8) | `scripts/check_budget.sh`(description 합계 ≤300단어 · SKILL 본문 ≤500단어) + `codex_args` | ✅ |
+| 시공 순서 (§9) | `loop-architect` 성숙도 사다리 L0~L5로 기계화 | ✅ |
+
+운영 절차(사이클 형태·게이트 배선·메모리 프로토콜)는 여기서 반복하지 않는다 — Claude Code 특화 운영 카운터파트는 `skills/loop-engineering/SKILL.md`와 그 `references/`다.
+
+✕/⚠ 행(홀드아웃·eval 게이트·부수효과 원장·독립 kill-switch·관측 카운터·가역성 엔지니어링)이 곧 `loop-architect`가 이 레포에 매기는 **성숙도 상한(L4/L5)의 사유**다. 진단·리뷰 기능이 존재하는 이유가 바로 이 갭을 기계적으로 드러내기 위해서다 — 문서가 스스로를 채점한다.
+
+---
+
 ## 남길 통찰
 
 **"done"은 증명이 아니라 주장이다. 그리고 사람 주의력은 가장 비싼 자원이다.**
