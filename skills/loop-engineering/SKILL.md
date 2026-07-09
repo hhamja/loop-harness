@@ -19,7 +19,7 @@ Plugin = immutable logic (installed once per machine). `.claude/loop/` = mutable
 
 ## Cycle shape
 
-Implement (by the configured implementer — a fresh `codex exec` per cycle when `implementer: codex`, prompt rebuilt from disk state; never a resumed session) → verifier grades ONCE at cycle end (phase gate — never per file edit) → main agent updates rubric checkboxes, rewrites state.md, records memory per protocol, overwrites review.md. Safety rails are always on: `max_iterations` cap and 3-consecutive-failure escalation. An unbounded "repeat until pass" loop is forbidden.
+Implement (fresh `codex exec` per cycle when `implementer: codex`, prompt rebuilt from disk state; never resumed) → verifier grades ONCE at cycle end (phase gate — never per file edit) → main agent updates rubric checkboxes, rewrites state.md, records memory, overwrites review.md. Safety rails always on: `max_iterations` cap and 3-consecutive-failure escalation. An unbounded "repeat until pass" loop is forbidden.
 
 ## Decision gates
 
@@ -27,11 +27,11 @@ Before a side-effecting action, classify by reversibility × impact. Reversible/
 
 ## Cheap reconnaissance
 
-Use the `explorer` agent (haiku, read-only) when a cycle needs codebase scouting before implementing — file maps, symbol locations, conventions. Don't spend main-context tokens on broad reading.
+Use the `explorer` agent (haiku, read-only) when a cycle needs codebase scouting — file maps, symbol locations, conventions — not main-context tokens on broad reading.
 
 ## When to read references/
 
-- Zooming out to the whole method's macro architecture / leverage rationale (6 principles, 7 layers, why loops beat per-turn prompting) → `references/elite-loop-engineering.md`
+- The macro architecture / leverage rationale — 6 principles, 7 layers, why loops beat per-turn prompting → `references/elite-loop-engineering.md`
 - Writing or fixing rubric criteria, or a criterion feels subjective → `references/rubric-guide.md`
 - Recording a failure, deciding what to distill, `[plugin]` vs `[project]` tagging → `references/memory-protocol.md`
 - Running parallel loop tasks in git worktrees, merging results → `references/worktree-guide.md`
@@ -40,4 +40,4 @@ Use the `explorer` agent (haiku, read-only) when a cycle needs codebase scouting
 
 ## Cost discipline
 
-Loops, verifiers and subagents burn tokens. Prefer `--verify-only` (grade once) or `--once` (single cycle) before committing to a full run. Deterministic work (budget counting, hook verdicts, state parsing, token estimation) belongs in scripts, not prompts. Codex output never enters main context: its stdout goes to `.claude/loop/.codex-log`; the main agent reads only `.codex-last`. Codex-side usage is billed by OpenAI and absent from the token estimate.
+Loops, verifiers and subagents burn tokens. Prefer `--verify-only` or `--once` before a full run. Deterministic work (budget counting, hook verdicts, state parsing, token estimation) belongs in scripts, not prompts. Codex output never enters main context: its stdout goes to `.claude/loop/.codex-log`; the main agent reads only `.codex-last`. Codex usage is billed by OpenAI, absent from the token estimate.
