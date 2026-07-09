@@ -31,6 +31,7 @@ Use the `explorer` agent (haiku, read-only) when a cycle needs codebase scouting
 
 ## When to read references/
 
+- Zooming out to the whole method's macro architecture / leverage rationale (6 principles, 7 layers, why loops beat per-turn prompting) → `references/elite-loop-engineering.md`
 - Writing or fixing rubric criteria, or a criterion feels subjective → `references/rubric-guide.md`
 - Recording a failure, deciding what to distill, `[plugin]` vs `[project]` tagging → `references/memory-protocol.md`
 - Running parallel loop tasks in git worktrees, merging results → `references/worktree-guide.md`
