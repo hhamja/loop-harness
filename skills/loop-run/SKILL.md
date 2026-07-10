@@ -22,7 +22,7 @@ Spawn the `verifier` agent with "grade `.claude/loop/rubric.md`". Print its repo
 ## Cycle (repeat until a stop condition)
 
 1. **Implement** by the implementer chosen at preflight:
-   - **claude** (or any fallback): pick the unresolved rubric criteria (from state.md), make the smallest change that could pass them. Prefer the cheap `explorer` agent for reconnaissance over broad main-context reading.
+   - **claude** (or any fallback): pick the unresolved rubric criteria (from state.md), make the smallest change that could pass them — skip any approach under `## Approaches tried`. Prefer the cheap `explorer` agent for reconnaissance over broad main-context reading.
    - **codex**: ONE fresh `codex exec` per cycle, never `resume`, prompt rebuilt from disk each cycle. Full procedure (prompt construction, the exact command, retry/fallback) in `references/codex-exec.md`.
 2. **Phase gate — end of cycle only:** spawn the `verifier` once with "grade `.claude/loop/rubric.md`". Never invoke it per file edit; it only reports.
 3. **Apply the report** — the main agent does ALL updates to `rubric.md`, `state.md`, `memory.md`, and `review.md`. Exact fields and rules: `references/apply-report.md`.

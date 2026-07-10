@@ -16,6 +16,10 @@ sid="${CLAUDE_CODE_SESSION_ID:-unknown}"; [ -n "$sid" ] || sid=unknown; printf '
 
 `CLAUDE_CODE_SESSION_ID` is version-dependent; `unknown` is the accepted fallback (the Stop gate then fails open).
 
+## Branch (never work on a protected branch)
+
+Before reconciling remote state, land on the work branch: `bash scripts/branch_guard.sh` (or the project equivalent). GitHub Flow — one small work unit = one `<type>/<slug>` branch off the default branch; the merge stays the one human gate. The guard is fail-open (`SKIP:`/`OK:`/`BRANCHED:`, exit 0) except one hard stop: `NEED:` (exit 1) when HEAD is a protected branch (`main`/`master`) with no usable `branch:` key in `loop.config.md`. On `NEED`, do not start the cycle — interactive: ask for the `<type>/<slug>` name and write it to `loop.config.md`, then rerun; headless: record the reason in state.md, set `human_gate: needs_branch`, and end the turn.
+
 ## Reconcile the open PR (CI is the loop's, not the human's)
 
 Before new work, reconcile the branch's remote state — a red PR is T0/T1 to fix, so the loop owns it and never leaves it for the human (only the merge is T2):

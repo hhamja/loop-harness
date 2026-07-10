@@ -20,6 +20,10 @@ Merge into a protected branch (`gh pr merge`), release/publish (`npm/pnpm/yarn/b
 
 Default gate boundary is the **merge/release line**, not the push line: pushing a work branch is reversible (delete the branch), so it is T0. A repo that pushes straight to `main` should set `gate_push: true` to raise every push to T2.
 
+## Branch strategy (GitHub Flow)
+
+One small work unit = one `<type>/<slug>` branch (`feat`/`fix`/`chore`/`docs`/`refactor`/`test`/…) cut off the default branch = one PR = one human merge. No long-lived `develop`; `main` only ever advances by merging a reviewed PR — so the loop **never works directly on a protected branch**. `scripts/branch_guard.sh` enforces this at loop-run preflight (the entry-side complement to the Stop hooks): on `main`/`master` it creates or switches to the `branch:` named in `loop.config.md`, and hard-stops (`NEED:`, exit 1) if none is set. It stands down for direct-to-main repos (`gate_push: true`). The merge stays the one T2 gate.
+
 ## Mechanical enforcement
 
 `scripts/decision_gate.sh` (PreToolUse Bash hook) hard-blocks the T2 command set inside any loop project, so the doctrine cannot be silently skipped. It reads three optional keys from `loop.config.md`:

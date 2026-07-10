@@ -258,6 +258,75 @@ test_budget() {
   assert_contains "$out" "BUDGET OK" "repo budget: BUDGET OK"
 }
 
+# ── check_memory.sh: Stop hook — memory/state hygiene, block JSON or empty, exit 0 ──
+# Blocks on contract/protocol violations (missing state field, untagged entry);
+# passes on a clean or absent loop; fails open when re-prompting.
+cmem() { printf '%s' "$1" | bash "$SCRIPTS/check_memory.sh"; }
+
+test_check_memory() {
+  printf '\ncheck_memory.sh\n'
+  local tmp out rc
+
+  # not a loop project
+  tmp="$(mktemp -d)"
+  out="$(cmem "$(printf '{"cwd":"%s"}' "$tmp")")"; rc=$?
+  assert_exit 0 "$rc" "no loop dir: exit 0"
+  assert_empty "$out" "no loop dir: no block"
+  rm -rf "$tmp"
+
+  # loop dir with only review.md (this repo's shape) -> nothing to judge, pass
+  tmp="$(mktemp -d)"; mkdir -p "$tmp/.claude/loop"
+  printf 'x\n' > "$tmp/.claude/loop/review.md"
+  out="$(cmem "$(printf '{"cwd":"%s"}' "$tmp")")"
+  assert_empty "$out" "no state/memory: no block"
+  rm -rf "$tmp"
+
+  # stop_hook_active: never block again even with a violation present
+  tmp="$(mktemp -d)"; mkdir -p "$tmp/.claude/loop"
+  printf 'human_gate: none\n' > "$tmp/.claude/loop/state.md"  # missing loop_active
+  out="$(cmem "$(printf '{"cwd":"%s","stop_hook_active":true}' "$tmp")")"
+  assert_empty "$out" "stop_hook_active: no block"
+  rm -rf "$tmp"
+
+  # clean state + clean memory (fresh init shape) -> pass
+  tmp="$(mktemp -d)"; mkdir -p "$tmp/.claude/loop"
+  printf 'loop_active: false\nhuman_gate: none\niteration: 0\n' > "$tmp/.claude/loop/state.md"
+  printf '## Distilled rules (consult before every cycle)\n(none yet)\n\n## Raw log\n(compress when this section exceeds 200 lines)\n' > "$tmp/.claude/loop/memory.md"
+  out="$(cmem "$(printf '{"cwd":"%s"}' "$tmp")")"
+  assert_empty "$out" "clean state+memory: no block"
+  rm -rf "$tmp"
+
+  # missing loop_active field -> block (drive_next contract)
+  tmp="$(mktemp -d)"; mkdir -p "$tmp/.claude/loop"
+  printf 'human_gate: none\niteration: 0\n' > "$tmp/.claude/loop/state.md"
+  out="$(cmem "$(printf '{"cwd":"%s"}' "$tmp")")"; rc=$?
+  assert_exit 0 "$rc" "missing field: exit 0 (block parsed only on exit 0)"
+  assert_contains "$out" '"decision":"block"' "missing loop_active: block"
+  rm -rf "$tmp"
+
+  # untagged distilled rule -> block; tagged -> pass
+  tmp="$(mktemp -d)"; mkdir -p "$tmp/.claude/loop"
+  printf 'loop_active: true\nhuman_gate: none\n' > "$tmp/.claude/loop/state.md"
+  printf '## Distilled rules\n- serialize suites that bind ports\n\n## Raw log\n' > "$tmp/.claude/loop/memory.md"
+  out="$(cmem "$(printf '{"cwd":"%s"}' "$tmp")")"
+  assert_contains "$out" '"decision":"block"' "untagged distilled rule: block"
+  printf '## Distilled rules\n- [project] serialize suites that bind ports\n\n## Raw log\n' > "$tmp/.claude/loop/memory.md"
+  out="$(cmem "$(printf '{"cwd":"%s"}' "$tmp")")"
+  assert_empty "$out" "tagged distilled rule: no block"
+  rm -rf "$tmp"
+
+  # untagged raw-log entry -> block; tagged -> pass
+  tmp="$(mktemp -d)"; mkdir -p "$tmp/.claude/loop"
+  printf 'loop_active: true\nhuman_gate: none\n' > "$tmp/.claude/loop/state.md"
+  printf '## Distilled rules\n(none yet)\n\n## Raw log\n### R3 test flaky\n- fail: x\n' > "$tmp/.claude/loop/memory.md"
+  out="$(cmem "$(printf '{"cwd":"%s"}' "$tmp")")"
+  assert_contains "$out" '"decision":"block"' "untagged raw-log entry: block"
+  printf '## Distilled rules\n(none yet)\n\n## Raw log\n### [project] R3 test flaky\n- fail: x\n' > "$tmp/.claude/loop/memory.md"
+  out="$(cmem "$(printf '{"cwd":"%s"}' "$tmp")")"
+  assert_empty "$out" "tagged raw-log entry: no block"
+  rm -rf "$tmp"
+}
+
 # ── gen_ci.sh: golden — detected stack facts -> pinned CI workflow ──
 gen_ci() { bash "$SCRIPTS/gen_ci.sh" "$@"; }
 
@@ -569,9 +638,87 @@ test_ci_watch() {
   rm -rf "$tmp"
 }
 
+# ── branch_guard.sh: preflight guard — never work on a protected branch ──
+# A CLI tool (not a hook): runs in the cwd, no JSON stdin. DRYRUN prints
+# "WOULD: git checkout -b <b>" instead of switching branches.
+branchguard() { ( cd "$1" && LOOP_BRANCHGUARD_DRYRUN=1 bash "$SCRIPTS/branch_guard.sh" ); }
+
+test_branch_guard() {
+  printf '\nbranch_guard.sh\n'
+  local tmp out rc
+
+  # not a loop project -> skip
+  tmp="$(mktemp -d)"
+  out="$(branchguard "$tmp")"
+  assert_contains "$out" "SKIP: not a loop project" "no loop dir: skip"
+  rm -rf "$tmp"
+
+  # already on a work branch -> respect it, do nothing
+  tmp="$(mktemp -d)"; mk_repo "$tmp" "feature/x"
+  out="$(branchguard "$tmp/work")"
+  assert_contains "$out" "OK: already on work branch feature/x" "work branch: ok"
+  rm -rf "$tmp"
+
+  # gate_push:true (direct-to-main) -> stand down even on a protected branch
+  tmp="$(mktemp -d)"; mk_repo "$tmp" "main"
+  printf 'gate_push: true\nbranch: feat/x\n' > "$tmp/work/.claude/loop/loop.config.md"
+  out="$(branchguard "$tmp/work")"
+  assert_contains "$out" "SKIP: gate_push" "gate_push=true: skip"
+  rm -rf "$tmp"
+
+  # protected branch + branch: set -> would create the work branch
+  tmp="$(mktemp -d)"; mk_repo "$tmp" "main"
+  printf 'branch: feat/x\n' > "$tmp/work/.claude/loop/loop.config.md"
+  out="$(branchguard "$tmp/work")"
+  assert_contains "$out" "WOULD: git checkout -b feat/x" "protected + branch: would branch"
+  rm -rf "$tmp"
+
+  # protected branch + no branch: key -> NEED, exit 1 (the one hard stop)
+  tmp="$(mktemp -d)"; mk_repo "$tmp" "main"
+  out="$(cd "$tmp/work" && bash "$SCRIPTS/branch_guard.sh" 2>&1)"; rc=$?
+  assert_exit 1 "$rc" "protected + no branch: exit 1"
+  assert_contains "$out" "NEED:" "protected + no branch: NEED"
+  rm -rf "$tmp"
+
+  # real run: on main with branch: feat/x -> HEAD actually moves to feat/x
+  tmp="$(mktemp -d)"; mk_repo "$tmp" "main"
+  printf 'branch: feat/x\n' > "$tmp/work/.claude/loop/loop.config.md"
+  ( cd "$tmp/work" && bash "$SCRIPTS/branch_guard.sh" ) >/dev/null 2>&1
+  out="$(git -C "$tmp/work" symbolic-ref --short HEAD)"
+  assert_contains "$out" "feat/x" "real run: HEAD moved to feat/x"
+  rm -rf "$tmp"
+}
+
+# ── fleet.sh: live/stale (PID) reconciliation over a fixture sessions dir ──
+# FLEET_SESSIONS_DIR injects the sessions dir; live PIDs = this shell ($$) and its
+# parent ($PPID, alive for the test's duration); dead PID = 999999 (above macOS
+# PID_MAX, so kill -0 fails).
+test_fleet() {
+  printf '\nfleet.sh\n'
+  local tmp out now
+  tmp="$(mktemp -d)"
+  now=$(( $(date +%s) * 1000 ))
+  printf '{"pid":%s,"name":"alive-wait","status":"waiting","kind":"interactive","cwd":"%s","updatedAt":%s}\n' \
+    "$$" "$tmp" "$now" > "$tmp/$$.json"
+  # empty status + null updatedAt: fields must not collapse/shift and must not crash arithmetic
+  printf '{"pid":%s,"name":"alive-empty","status":"","kind":"interactive","cwd":"%s","updatedAt":null}\n' \
+    "$PPID" "$tmp" > "$tmp/$PPID.json"
+  printf '{"pid":999999,"name":"dead-one","status":"busy","kind":"interactive","cwd":"%s","updatedAt":%s}\n' \
+    "$tmp" "$now" > "$tmp/999999.json"
+
+  out="$(FLEET_SESSIONS_DIR="$tmp" bash "$SCRIPTS/fleet.sh" 2>&1)"
+  case "$out" in *error*) bad "empty status: no crash" "got: $out" ;; *) ok "empty status: no crash" ;; esac
+  assert_contains "$out" "alive-wait" "live PID: shown"
+  assert_contains "$out" "alive-empty" "live PID w/ empty status: shown"
+  case "$out" in *dead-one*) bad "dead PID: hidden" "dead-one present" ;; *) ok "dead PID: hidden" ;; esac
+  assert_contains "$out" "1 stale" "dead PID counted as stale"
+  rm -rf "$tmp"
+}
+
 test_verifier_guard
 test_decision_gate
 test_stop_gate
+test_check_memory
 test_budget
 test_gen_ci
 test_drive_next
@@ -579,6 +726,8 @@ test_auto_push
 test_auto_commit
 test_auto_pr
 test_ci_watch
+test_branch_guard
+test_fleet
 
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

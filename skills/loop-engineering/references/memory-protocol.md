@@ -2,6 +2,8 @@
 
 Purpose: turn failures into compounding, session-surviving rules. A failure that stops at step 1 is noise; the compounding value appears only when an entry reaches step 5.
 
+> Not everything a failure teaches is a durable rule. A *rejected approach* ("tried X, verifier still failed") is run-scoped episodic state — it belongs in state.md's `## Approaches tried`, pruned when the criterion passes. A *distilled rule* is a cross-run lesson that outlives the criterion — it belongs here in memory.md. Do not promote a one-off dead end into a distilled rule.
+
 | Step | Name | What to write |
 |---|---|---|
 | 1 | fail | What was attempted, the exact error/symptom, command + output snippet |
