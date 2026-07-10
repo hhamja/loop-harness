@@ -1006,6 +1006,38 @@ test_loop_reminder() {
   rm -rf "$tmp"
 }
 
+# ── session_state_digest.sh: stdin JSON -> stdout digest (context), always exit 0 ──
+ssd() { printf '%s' "$1" | bash "$SCRIPTS/session_state_digest.sh"; }
+
+test_session_state_digest() {
+  printf '\nsession_state_digest.sh\n'
+  local tmp out rc n
+
+  # not a loop project -> silent exit 0 (fail-open)
+  tmp="$(mktemp -d)"
+  out="$(ssd "$(printf '{"cwd":"%s"}' "$tmp")")"; rc=$?
+  assert_exit 0 "$rc" "no loop dir: exit 0"
+  assert_empty "$out" "no loop dir: no output"
+  rm -rf "$tmp"
+
+  # root + nested state.md injected whole; _template pruned; comments stripped
+  tmp="$(mktemp -d)"
+  mkdir -p "$tmp/.claude/loop" "$tmp/apps/x/.claude/loop" "$tmp/apps/_template/.claude/loop"
+  printf '<!-- REWRITE me\nstill comment -->\nloop_active: true\nhuman_gate: none\n' > "$tmp/.claude/loop/state.md"
+  printf 'loop_active: false\n## Unresolved\n- nested item\n' > "$tmp/apps/x/.claude/loop/state.md"
+  printf 'loop_active: false\n' > "$tmp/apps/_template/.claude/loop/state.md"
+  out="$(ssd "$(printf '{"cwd":"%s"}' "$tmp")")"; rc=$?
+  assert_exit 0 "$rc" "loop project: exit 0"
+  assert_contains "$out" 'Loop State Digest' "preamble present"
+  assert_contains "$out" 'loop_active: true' "root state injected"
+  assert_contains "$out" 'nested item' "nested app state injected"
+  case "$out" in *_template*) bad "_template pruned" "found _template in output" ;; *) ok "_template pruned" ;; esac
+  case "$out" in *REWRITE*) bad "html comments stripped" "comment text leaked" ;; *) ok "html comments stripped" ;; esac
+  n="$(printf '%s\n' "$out" | grep -cF '## .claude/loop/state.md')"
+  if [ "$n" = "1" ]; then ok "root header exactly once (no double injection)"; else bad "root header exactly once (no double injection)" "count=$n"; fi
+  rm -rf "$tmp"
+}
+
 test_verifier_guard
 test_decision_gate
 test_loop_reminder
@@ -1022,6 +1054,7 @@ test_auto_pr
 test_ci_watch
 test_branch_guard
 test_fleet
+test_session_state_digest
 
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

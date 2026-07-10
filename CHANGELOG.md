@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.15.0 — 2026-07-11
+
+- **`scripts/session_state_digest.sh` (new SessionStart hook): in a loop project, every `.claude/loop/state.md` is injected into session context at start.** The complement of 0.14.0's `loop_reminder.sh` (silent where that one speaks, and vice versa). Root cause it fixes: "read state.md before answering" was prompt guidance only, so interactive sessions kept trusting stale cross-session memory over fresh disk state (2026-07-10 incident: a session re-announced human gates that another session had already cleared and recorded in state.md). Injecting the disk state up front turns the discipline into a mechanism — stale memory can't win over what's already in context.
+  - Finds the root `state.md` plus nested ones (monorepo `apps/*/` layouts); `.git`, `node_modules`, and `*_template*` scaffolding are pruned. Root file matched exactly once (double-injection regression-locked in tests).
+  - Files are injected whole (state.md is already the ≤100-line digest the memory contract nudges) with `<!-- -->` comments stripped, so the template's REWRITE instruction never reaches context. Pure bash+awk, no new dependencies.
+  - Fail-open: not a loop project (no root `state.md`) -> silent exit 0, nothing injected. Never blocks a session. `hooks.json`'s SessionStart entry gains the second command (installed-version bump required — this release).
+
 ## 0.14.0 — 2026-07-11
 
 - **loopy in EVERY project — the gate goes loop-independent, the workflow entry gets a mechanical reminder.** Diagnosis: three concerns with different natural scopes (machine-wide T2 policy, machine-wide workflow entry, per-task loop runtime) all shared one activation switch — `.claude/loop/` existence — so a project that never ran `loop-init` got zero loopy: no safety gate, no doctrine. Re-modularized along the real scopes:
