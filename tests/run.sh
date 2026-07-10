@@ -175,6 +175,9 @@ test_decision_gate() {
   out="$(dgate "$tmp" "git push --force origin feature/x")"
   assert_contains "$out" '"deny"' "force-push: deny"
 
+  out="$(dgate "$tmp" "git push -f origin feature/x")"
+  assert_contains "$out" '"deny"' "force-push short -f: deny (leading push space consumed)"
+
   out="$(dgate "$tmp" "git push --tags")"
   assert_contains "$out" '"deny"' "tag push: deny"
 
@@ -189,6 +192,18 @@ test_decision_gate() {
 
   out="$(dgate "$tmp" "rm -rf /")"
   assert_contains "$out" '"deny"' "catastrophic rm: deny"
+
+  out="$(dgate "$tmp" "rm -rf ~")"
+  assert_contains "$out" '"deny"' "whole home ~: deny"
+
+  out="$(dgate "$tmp" "rm -rf \$HOME")"
+  assert_contains "$out" '"deny"' "whole home \$HOME: deny"
+
+  out="$(dgate "$tmp" "rm -rf ~/.claude/skills/x")"
+  assert_empty "$out" "home subdir rm: allow (reversible T1, not catastrophic)"
+
+  out="$(dgate "$tmp" "rm -rf \$HOME/.cache")"
+  assert_empty "$out" "\$HOME subdir rm: allow (reversible T1)"
 
   out="$(dgate "$tmp" "git commit -m x")"
   assert_empty "$out" "local commit: allow"

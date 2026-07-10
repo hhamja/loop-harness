@@ -137,8 +137,10 @@ if printf '%s' "$CMD" | grep -Eq "${SEG}git[[:space:]]+(-[^[:space:]]+[[:space:]
   if [ "$GATE_PUSH" = "true" ]; then
     gate push "git push (gate_push=true)"
   fi
-  # force-push -> rewrites remote history (high-impact)
-  if printf '%s' "$CMD" | grep -Eq "git[[:space:]]+push[[:space:]].*(--force([[:space:]=]|\$)|--force-with-lease|[[:space:]]-f([[:space:]]|\$))"; then
+  # force-push -> rewrites remote history (high-impact). Match -f/--force as a
+  # whole arg token in ANY position — `git[[:space:]]+push[[:space:]]` consumes the
+  # only space before the first arg, so a leading `[[:space:]]-f` misses `push -f`.
+  if printf '%s' "$CMD" | grep -Eq "git[[:space:]]+push[[:space:]]+([^[:space:]]+[[:space:]]+)*(--force([[:space:]=]|\$)|--force-with-lease|-f([[:space:]]|\$))"; then
     gate push "git force-push"
   fi
   # tag push -> publishing a release ref
@@ -151,12 +153,16 @@ if printf '%s' "$CMD" | grep -Eq "${SEG}git[[:space:]]+(-[^[:space:]]+[[:space:]
   fi
 fi
 
-# 5. catastrophic delete (rm -rf / -fr of a root target: / ~ $HOME)
-ROOT_TGT='(/|~|[$]HOME|[$][{]HOME[}])'
-if printf '%s' "$CMD" | grep -Eq "${SEG}rm[[:space:]]+(-[a-zA-Z]*[[:space:]]+)*-[a-zA-Z]*[rR][a-zA-Z]*[fF][a-zA-Z]*[[:space:]]+${ROOT_TGT}([[:space:]]|/|\$)"; then
+# 5. catastrophic delete: a WHOLE root or WHOLE home. A home SUBDIR
+# (rm -rf ~/.cache) is reversible T1 and must pass — see .claude/loop/review.md.
+#   /         : root — trailing space, '/', or end          (rm -rf /, //)
+#   ~ /$HOME  : whole home only — optional single trailing '/' then space/end
+#               (rm -rf ~, ~/, $HOME) but NOT ~/<subdir>
+CATA_TGT='(/([[:space:]]|/|$)|(~|[$]HOME|[$][{]HOME[}])/?([[:space:]]|$))'
+if printf '%s' "$CMD" | grep -Eq "${SEG}rm[[:space:]]+(-[a-zA-Z]*[[:space:]]+)*-[a-zA-Z]*[rR][a-zA-Z]*[fF][a-zA-Z]*[[:space:]]+${CATA_TGT}"; then
   gate destructive "catastrophic rm -rf"
 fi
-if printf '%s' "$CMD" | grep -Eq "${SEG}rm[[:space:]]+(-[a-zA-Z]*[[:space:]]+)*-[a-zA-Z]*[fF][a-zA-Z]*[rR][a-zA-Z]*[[:space:]]+${ROOT_TGT}([[:space:]]|/|\$)"; then
+if printf '%s' "$CMD" | grep -Eq "${SEG}rm[[:space:]]+(-[a-zA-Z]*[[:space:]]+)*-[a-zA-Z]*[fF][a-zA-Z]*[rR][a-zA-Z]*[[:space:]]+${CATA_TGT}"; then
   gate destructive "catastrophic rm -fr"
 fi
 
