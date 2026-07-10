@@ -788,6 +788,18 @@ test_fleet() {
   assert_exit 1 "$?" "focus: dead pid -> exit 1"
   FLEET_SESSIONS_DIR="$tmp" bash "$SCRIPTS/fleet.sh" --focus 424242 >/dev/null 2>&1
   assert_exit 1 "$?" "focus: unknown pid -> exit 1"
+
+  # outermost_app: a VS Code terminal's ancestor is the NESTED Code Helper.app —
+  # resolving to it (no bin/code, activate is a no-op) was the click-does-nothing bug.
+  # Must resolve to the OUTERMOST bundle. Sourcing exposes functions without dispatch.
+  out="$( (source "$SCRIPTS/fleet.sh" >/dev/null 2>&1
+    outermost_app "/T/AppTranslocation/x/d/Visual Studio Code.app/Contents/Frameworks/Code Helper.app/Contents/MacOS/Code Helper") )"
+  assert_exit "/T/AppTranslocation/x/d/Visual Studio Code.app" "$out" "focus: nested helper -> outermost .app"
+  out="$( (source "$SCRIPTS/fleet.sh" >/dev/null 2>&1
+    outermost_app "/Applications/iTerm.app/Contents/MacOS/iTerm2") )"
+  assert_exit "/Applications/iTerm.app" "$out" "focus: plain app path -> its .app"
+  out="$( (source "$SCRIPTS/fleet.sh" >/dev/null 2>&1; outermost_app "/bin/zsh") )"
+  assert_empty "$out" "focus: non-bundle path -> empty"
   rm -rf "$tmp"
 }
 

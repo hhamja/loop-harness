@@ -167,6 +167,17 @@ render_swiftbar() {
   printf -- '---\n%d live · %d stale\n' "$LIVE" "$STALE"
 }
 
+# Outermost .app bundle of an executable path, or empty if none.
+# Helpers run from NESTED bundles (VS Code's terminal shell is parented by
+# ".../Visual Studio Code.app/Contents/Frameworks/Code Helper.app/..."), and
+# only the OUTERMOST bundle has the app CLI / responds to activate — so strip
+# at the FIRST ".app/" from the left, never the innermost match.
+outermost_app() {
+  case "$1" in
+    *.app/Contents/*) printf '%s.app' "${1%%.app/*}" ;;
+  esac
+}
+
 # Raise the window hosting session $1 (wired to SwiftBar row clicks).
 # Walks the session PID's ancestors to the owning .app bundle — works for
 # VS Code/Cursor including AppTranslocation paths, no hardcoded CLI location —
@@ -186,9 +197,8 @@ focus_session() {
     [ -z "$cur" ] && break
     [ "$cur" -le 1 ] && break
     path=$(ps -o comm= -p "$cur" 2>/dev/null)   # full executable path on macOS
-    case "$path" in
-      */Contents/MacOS/*) app="${path%%/Contents/MacOS/*}"; break ;;
-    esac
+    app=$(outermost_app "$path")
+    [ -n "$app" ] && break
   done
   [ -n "$app" ] || { echo "fleet: no app window found for pid $pid (bg session?)" >&2; exit 1; }
 
@@ -199,6 +209,9 @@ focus_session() {
   done
   exec osascript -e "tell application \"$app\" to activate"   # other terminal apps: app-level raise
 }
+
+# Sourced (tests): expose functions only, skip dispatch.
+[[ "${BASH_SOURCE[0]}" != "$0" ]] && return 0
 
 case "${1:-}" in
   -h|--help)  usage ;;
