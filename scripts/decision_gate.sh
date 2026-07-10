@@ -5,9 +5,12 @@
 # or HIGH-IMPACT (T2) needs a human gate; reversible/local work (T0/T1) never does.
 # This hook mechanically blocks the T2 class so the doctrine cannot be forgotten.
 #
-# Scope: acts ONLY inside a loop project (cwd has `.claude/loop/`). Every other
-# session, and any parse doubt, exits 0 (fail-open) — general Chrome/CLI use of git
-# push etc. outside a loop is never touched.
+# Scope: acts in EVERY project, loop or not (loop-independent since 0.14.0). The
+# T2 doctrine — merge/publish/protected-branch push is a human gate — holds
+# machine-wide, so the backstop must too; an honest agent outside a loop forgets
+# it just as easily. Any parse doubt exits 0 (fail-open). Config still reads
+# `.claude/loop/loop.config.md` when present; absent config = the safe defaults
+# (protected: main master, gate_push: false).
 #
 # T2 default set (high-signal, low false-positive):
 #   - package publish (npm/pnpm/yarn/bun publish)
@@ -33,9 +36,6 @@ set -u
 # shellcheck source=scripts/hook_lib.sh
 . "$(cd "$(dirname "$0")" && pwd)/hook_lib.sh"
 hook_init
-
-# --- scope: loop projects only ---
-[ -d "$LOOP_DIR" ] || exit 0
 
 hook_debug decision_gate
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.14.0 — 2026-07-11
+
+- **loopy in EVERY project — the gate goes loop-independent, the workflow entry gets a mechanical reminder.** Diagnosis: three concerns with different natural scopes (machine-wide T2 policy, machine-wide workflow entry, per-task loop runtime) all shared one activation switch — `.claude/loop/` existence — so a project that never ran `loop-init` got zero loopy: no safety gate, no doctrine. Re-modularized along the real scopes:
+  - **`decision_gate.sh`**: the `[ -d .claude/loop ]` scope guard is gone. T2 (publish / release / `gh pr merge` / force-push / tag push / protected-branch push / catastrophic `rm -rf`) is now gated in every project, loop or not — an honest agent outside a loop forgets the doctrine just as easily, and "merge/publish is a human gate" was never a per-project rule. Absent `loop.config.md` = safe defaults (protected: `main master`, `gate_push: false`); the one-shot `.gate-approved` approval flow works unchanged (writing the marker creates the dir). Known, accepted friction: a direct `git push origin main` in a personal non-loop repo now takes one approval — override per project via `protected_branches:`.
+  - **`loop_reminder.sh`** (new SessionStart hook): in a git project with no `.claude/loop/`, injects a one-line reminder that substantial implementation goes through `/loopy:loop-init` → `/loopy:loop-run`. Never blocks — "is this substantial?" is the model's judgment call; the hook only supplies the fact it tends to forget. Silent in loop projects and non-git directories. Blocking alternatives (Stop-time check, Edit/Write gate) deliberately rejected: a gate on a condition no machine can verify decays into a rubber stamp.
+  - Loop runtime hooks (`stop_gate`, `check_memory`, `auto_*`) stay loop-scoped — correct, their subject only exists there. `hooks.json` gains the SessionStart entry (installed-version bump required — this release). Tests: non-loop deny/allow matrix for the gate, remind/silent/silent matrix for the reminder.
+
 ## 0.13.0 — 2026-07-10
 
 - **Auto commit/push in EVERY session — the shared-tree fix moves from gating WHO to scoping WHAT.** 0.12.0 stopped the `git add -A` entanglement by making `auto_commit`/`auto_push` stand down unless the session had run a loop (`.run-marker` P1) — which also meant interactive sessions got no turn-end automation at all. Now:

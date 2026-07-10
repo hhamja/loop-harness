@@ -147,19 +147,24 @@ test_stop_gate() {
 }
 
 # ── decision_gate.sh: stdin JSON + fixture cwd -> stdout (deny JSON or empty), exit 0 ──
-# Gates T2 (irreversible/high-impact) commands inside a loop project; reversible/local
-# and non-loop commands pass. Each case builds a throwaway loop project.
+# Gates T2 (irreversible/high-impact) commands in EVERY project, loop or not
+# (loop-independent since 0.14.0); reversible/local commands pass. Loop cases
+# build a throwaway loop project; the non-loop case runs on defaults.
 dgate() { printf '{"cwd":"%s","session_id":"S1","tool_input":{"command":"%s"}}' "$1" "$2" | bash "$SCRIPTS/decision_gate.sh"; }
 
 test_decision_gate() {
   printf '\ndecision_gate.sh\n'
   local tmp out rc
 
-  # not a loop project -> never gate
+  # no loop project -> T2 still gated on the safe defaults (loop-independent gate)
   tmp="$(mktemp -d)"
   out="$(dgate "$tmp" "git push origin main")"; rc=$?
   assert_exit 0 "$rc" "no loop dir: exit 0"
-  assert_empty "$out" "no loop dir: no gate"
+  assert_contains "$out" '"deny"' "no loop dir: push to protected still denied"
+  out="$(dgate "$tmp" "npm publish")"
+  assert_contains "$out" '"deny"' "no loop dir: npm publish denied"
+  out="$(dgate "$tmp" "git push origin feature/x")"
+  assert_empty "$out" "no loop dir: work-branch push allowed"
   rm -rf "$tmp"
 
   # loop project, default config (protected: main master, gate_push: false)
@@ -973,8 +978,37 @@ test_touch_track() {
   rm -rf "$tmp"
 }
 
+# ── loop_reminder.sh: SessionStart hook — workflow-entry reminder, stdout or empty, exit 0 ──
+# Reminds only in a git project with no .claude/loop/; silent everywhere else.
+remind() { printf '%s' "$1" | bash "$SCRIPTS/loop_reminder.sh"; }
+
+test_loop_reminder() {
+  printf '\nloop_reminder.sh\n'
+  local tmp out rc
+
+  # git project without a loop -> remind
+  tmp="$(mktemp -d)"; git init -q "$tmp"
+  out="$(remind "$(printf '{"cwd":"%s","session_id":"S1"}' "$tmp")")"; rc=$?
+  assert_exit 0 "$rc" "no loop: exit 0"
+  assert_contains "$out" "loop-init" "no loop in git project: reminder emitted"
+  rm -rf "$tmp"
+
+  # loop project -> silent (the loop runtime takes it from here)
+  tmp="$(mktemp -d)"; git init -q "$tmp"; mkdir -p "$tmp/.claude/loop"
+  out="$(remind "$(printf '{"cwd":"%s","session_id":"S1"}' "$tmp")")"
+  assert_empty "$out" "loop present: silent"
+  rm -rf "$tmp"
+
+  # not a git worktree -> silent (no coding-policy noise outside projects)
+  tmp="$(mktemp -d)"
+  out="$(remind "$(printf '{"cwd":"%s","session_id":"S1"}' "$tmp")")"
+  assert_empty "$out" "non-git dir: silent"
+  rm -rf "$tmp"
+}
+
 test_verifier_guard
 test_decision_gate
+test_loop_reminder
 test_stop_gate
 test_check_memory
 test_loop_lock

@@ -26,6 +26,16 @@
         ]
       }
     ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/loop_reminder.sh"
+          }
+        ]
+      }
+    ],
     "Stop": [
       {
         "hooks": [
