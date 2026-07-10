@@ -143,6 +143,12 @@ if printf '%s' "$CMD" | grep -Eq "${SEG}git[[:space:]]+(-[^[:space:]]+[[:space:]
   if printf '%s' "$CMD" | grep -Eq "git[[:space:]]+push[[:space:]]+([^[:space:]]+[[:space:]]+)*(--force([[:space:]=]|\$)|--force-with-lease|-f([[:space:]]|\$))"; then
     gate push "git force-push"
   fi
+  # force-refspec form: `git push origin +main` / `+refs/heads/x` force-pushes a
+  # ref with no -f/--force flag. A `+`-prefixed refspec token (space, `+`, then a
+  # non-flag char) is a force-push of ANY branch -> same T2 as --force above.
+  if printf '%s' "$CMD" | grep -Eq "git[[:space:]]+push[[:space:]].*[[:space:]][+][^[:space:]-]"; then
+    gate push "git force-push (+refspec)"
+  fi
   # tag push -> publishing a release ref
   if printf '%s' "$CMD" | grep -Eq "git[[:space:]]+push[[:space:]].*(--tags([[:space:]]|\$)|refs/tags/)"; then
     gate release "git tag push"

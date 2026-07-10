@@ -218,6 +218,13 @@ test_decision_gate() {
   out="$(dgate "$tmp" "git push origin mainline")"
   assert_empty "$out" "push to mainline (not protected): allow"
 
+  # force-refspec form (`+ref`) is a force-push with no -f/--force flag -> T2 for any branch
+  out="$(dgate "$tmp" "git push origin +main")"
+  assert_contains "$out" '"deny"' "force-refspec +main: deny (force-push to protected)"
+
+  out="$(dgate "$tmp" "git push origin +feature/x")"
+  assert_contains "$out" '"deny"' "force-refspec +feature: deny (force-push, matches --force policy)"
+
   # gate_push:true raises every push to T2
   printf 'protected_branches: main\ngate_push: true\n' > "$tmp/.claude/loop/loop.config.md"
   out="$(dgate "$tmp" "git push origin feature/x")"
