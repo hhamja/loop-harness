@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.12.2 — 2026-07-10
+
+- **`decision_gate.sh`: 3 honest-agent gate holes closed** (reproduced in `harness-review.md`, merged in PR #11; this release only cuts a version so installed plugins actually pick the fix up). R1: catastrophic-delete matcher now catches the root-glob form (`rm -rf /*`, the classic empty-var `rm -rf "$DIR"/*` expansion) while still allowing home subdirs. R2: protected-branch push matcher now also gates fully-qualified refspecs (`HEAD:refs/heads/<protected>`) without over-gating `feature/main`-style work branches. R3: an unreadable clock (`date +%s` returning 0) no longer re-approves an expired `.gate-approved` marker — freshness now fails closed. Regression tests for all three + an over-gate guard; suite at 163 passing.
+
 ## 0.12.1 — 2026-07-10
 
 - **`fleet.sh --focus PID`: click a menubar row, land in that session's window.** Every SwiftBar dropdown row now carries a click action (`bash=… param1=--focus param2=<pid>`). Focus walks the session PID's process ancestry to the owning `.app` bundle — so it works for VS Code *and* Cursor, including AppTranslocation installs, with no hardcoded CLI path — then opens the session's cwd through the app's bundled CLI (`bin/code`/`bin/cursor`), which macOS resolves to *raising the already-open window* for that folder; non-Electron terminals fall back to an AppleScript app-level activate. Window-level by design: VS Code exposes no external API to focus a specific terminal tab, so picking the tab inside the raised window stays manual. Arg-validation covered in `test_fleet` (missing/dead/unknown pid); the raise itself verified live.
