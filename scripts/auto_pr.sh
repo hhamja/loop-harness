@@ -49,6 +49,13 @@ if printf '%s' "$INPUT" | grep -q '"stop_hook_active"[[:space:]]*:[[:space:]]*tr
   exit 0
 fi
 
+# --- session/loop gate (P1+P2): act only when THIS session actually ran a loop
+# here (same-session .run-marker) AND no different fresh session holds the worktree
+# lock. This is what stops a shared-working-tree session from opening a PR for
+# another session's changes. Logic + tests: scripts/loop_lock.sh. ---
+CUR_SID="$(printf '%s' "$INPUT" | sed -n 's/.*"session_id"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1)"
+bash "$(cd "$(dirname "$0")" && pwd)/loop_lock.sh" gate "$CUR_SID" || exit 0
+
 # --- config ---
 CONFIG="$LOOP_DIR/loop.config.md"
 AUTO_PR="true"

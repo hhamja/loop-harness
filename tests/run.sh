@@ -416,6 +416,13 @@ mk_repo() {
     git config user.email t@t.co; git config user.name tester
     git checkout -q -B "$2"
     mkdir -p .claude/loop
+    # Real loop projects gitignore .claude/loop/.* (loop-init) — mirror that with a
+    # local exclude so the seeded dotfiles below never show as untracked (keeps the
+    # "clean tree" fixtures clean; no tracked file, no extra commit).
+    printf '.claude/loop/.*\n' >> .git/info/exclude
+    # same-session run-marker: the auto_* hooks now gate on it (loop_lock.sh) —
+    # without it they stand down, so seed it for every hook fixture (session S1).
+    printf 'session_id=S1\ntimestamp=1\n' > .claude/loop/.run-marker
     echo one > f1; git add f1; git commit -qm c1
   )
 }
@@ -438,6 +445,7 @@ test_auto_push() {
 
   # guard 3: auto_push disabled
   tmp="$(mktemp -d)"; mkdir -p "$tmp/.claude/loop"
+  printf 'session_id=S1\ntimestamp=1\n' > "$tmp/.claude/loop/.run-marker"
   printf 'auto_push: false\n' > "$tmp/.claude/loop/loop.config.md"
   out="$(autopush "$(printf '{"cwd":"%s","session_id":"S1"}' "$tmp")")"
   assert_empty "$out" "auto_push=false: no push"
@@ -445,6 +453,7 @@ test_auto_push() {
 
   # guard 4: gate_push=true -> every push is a T2 gate, auto-push must stand down
   tmp="$(mktemp -d)"; mkdir -p "$tmp/.claude/loop"
+  printf 'session_id=S1\ntimestamp=1\n' > "$tmp/.claude/loop/.run-marker"
   printf 'gate_push: true\n' > "$tmp/.claude/loop/loop.config.md"
   out="$(autopush "$(printf '{"cwd":"%s","session_id":"S1"}' "$tmp")")"
   assert_empty "$out" "gate_push=true: no push"
@@ -454,6 +463,12 @@ test_auto_push() {
   tmp="$(mktemp -d)"; mk_repo "$tmp" "feature/x"
   out="$(autopush "$(printf '{"cwd":"%s/work","session_id":"S1"}' "$tmp")")"
   assert_contains "$out" "WOULD: git push -u origin feature/x" "no upstream: push -u origin branch"
+  rm -rf "$tmp"
+
+  # session gate (P1): marker is session S1, but this turn is a DIFFERENT session -> stand down
+  tmp="$(mktemp -d)"; mk_repo "$tmp" "feature/x"
+  out="$(autopush "$(printf '{"cwd":"%s/work","session_id":"OTHER"}' "$tmp")")"
+  assert_empty "$out" "foreign session: no push (loop_lock gate)"
   rm -rf "$tmp"
 
   # guard 7b: upstream set, branch ahead -> plain push
@@ -532,6 +547,12 @@ test_auto_commit() {
   assert_contains "$out" "WOULD: git commit" "dirty branch: would commit"
   rm -rf "$tmp"
 
+  # session gate (P1): dirty tree but a DIFFERENT session than the marker -> no commit
+  tmp="$(mktemp -d)"; mk_repo "$tmp" "feature/x"; echo dirty > "$tmp/work/f2"
+  out="$(autocommit "$(printf '{"cwd":"%s/work","session_id":"OTHER"}' "$tmp")")"
+  assert_empty "$out" "foreign session: no commit (loop_lock gate)"
+  rm -rf "$tmp"
+
   # local commit is T0 even on a protected branch (direct-to-main workflow)
   tmp="$(mktemp -d)"; mk_repo "$tmp" "main"; echo dirty > "$tmp/work/f2"
   out="$(autocommit "$(printf '{"cwd":"%s/work"}' "$tmp")")"
@@ -600,6 +621,12 @@ test_auto_pr() {
   tmp="$(mktemp -d)"; mk_repo_pushed "$tmp" "feature/x"
   out="$(autopr "$(printf '{"cwd":"%s/work"}' "$tmp")")"
   assert_contains "$out" "WOULD: gh pr create --fill (head=feature/x)" "pushed branch: would open PR"
+  rm -rf "$tmp"
+
+  # session gate (P1): pushed branch but a DIFFERENT session than the marker -> no PR
+  tmp="$(mktemp -d)"; mk_repo_pushed "$tmp" "feature/x"
+  out="$(autopr "$(printf '{"cwd":"%s/work","session_id":"OTHER"}' "$tmp")")"
+  assert_empty "$out" "foreign session: no PR (loop_lock gate)"
   rm -rf "$tmp"
 
   # pr_draft:true -> --draft flag added
@@ -723,10 +750,64 @@ test_fleet() {
   rm -rf "$tmp"
 }
 
+# ── loop_lock.sh: session-ownership + per-worktree loop lock (gate/acquire/release) ──
+# Operates on ./.claude/loop, so each case runs it inside a cd'd subshell.
+test_loop_lock() {
+  printf '\nloop_lock.sh\n'
+  local tmp L
+  L="$SCRIPTS/loop_lock.sh"
+
+  # gate P1 — marker presence + same-session
+  tmp="$(mktemp -d)"; mkdir -p "$tmp/.claude/loop"
+  ( cd "$tmp" && bash "$L" gate S1 ); assert_exit 1 "$?" "gate: no marker -> stand down"
+  printf 'session_id=S1\ntimestamp=1\n' > "$tmp/.claude/loop/.run-marker"
+  ( cd "$tmp" && bash "$L" gate S1 ); assert_exit 0 "$?" "gate: same-session marker -> ok"
+  ( cd "$tmp" && bash "$L" gate OTHER ); assert_exit 1 "$?" "gate: foreign-session marker -> stand down"
+  ( cd "$tmp" && bash "$L" gate unknown ); assert_exit 0 "$?" "gate: unknown sid + marker -> ok (weak fallback)"
+  rm -rf "$tmp"
+
+  # acquire / refuse / steal
+  tmp="$(mktemp -d)"; mkdir -p "$tmp/.claude/loop"
+  ( cd "$tmp" && bash "$L" acquire S1 111 ); assert_exit 0 "$?" "acquire: fresh -> ok"
+  if [ -f "$tmp/.claude/loop/.session-lock" ]; then ok "acquire: lock written"; else bad "acquire: lock written"; fi
+  ( cd "$tmp" && bash "$L" acquire S1 222 ); assert_exit 0 "$?" "acquire: same-session re-acquire -> ok"
+  ( cd "$tmp" && bash "$L" acquire OTHER 333 2>/dev/null ); assert_exit 1 "$?" "acquire: foreign fresh -> refuse"
+
+  # gate P2 — foreign fresh lock blocks even with same-session marker
+  printf 'session_id=S1\ntimestamp=1\n' > "$tmp/.claude/loop/.run-marker"
+  ( cd "$tmp" && bash "$L" gate S1 ); assert_exit 0 "$?" "gate: own lock -> ok"
+  printf 'session_id=OTHER\npid=1\nepoch=%s\n' "$(date +%s)" > "$tmp/.claude/loop/.session-lock"
+  ( cd "$tmp" && bash "$L" gate S1 ); assert_exit 1 "$?" "gate: foreign fresh lock -> stand down"
+
+  # stale foreign lock -> gate ok + acquire steals
+  printf 'session_id=OTHER\npid=1\nepoch=1\n' > "$tmp/.claude/loop/.session-lock"
+  ( cd "$tmp" && bash "$L" gate S1 ); assert_exit 0 "$?" "gate: stale foreign lock -> ok"
+  ( cd "$tmp" && bash "$L" acquire S1 444 ); assert_exit 0 "$?" "acquire: steal stale lock -> ok"
+
+  # release: own removed, foreign fresh kept
+  ( cd "$tmp" && bash "$L" release S1 )
+  if [ -f "$tmp/.claude/loop/.session-lock" ]; then bad "release: own lock removed" "still present"; else ok "release: own lock removed"; fi
+  printf 'session_id=OTHER\npid=1\nepoch=%s\n' "$(date +%s)" > "$tmp/.claude/loop/.session-lock"
+  ( cd "$tmp" && bash "$L" release S1 )
+  if [ -f "$tmp/.claude/loop/.session-lock" ]; then ok "release: foreign lock kept"; else bad "release: foreign lock kept" "removed"; fi
+
+  # LOOP_LOCK_DISABLE bypasses the gate with no marker
+  rm -f "$tmp/.claude/loop/.run-marker" "$tmp/.claude/loop/.session-lock"
+  ( cd "$tmp" && LOOP_LOCK_DISABLE=1 bash "$L" gate S1 ); assert_exit 0 "$?" "gate: LOOP_LOCK_DISABLE bypass"
+
+  # TTL boundary: a 10s-old foreign lock is stale at TTL=5, fresh at TTL=3600
+  printf 'session_id=S1\ntimestamp=1\n' > "$tmp/.claude/loop/.run-marker"
+  printf 'session_id=OTHER\npid=1\nepoch=%s\n' "$(( $(date +%s) - 10 ))" > "$tmp/.claude/loop/.session-lock"
+  ( cd "$tmp" && LOOP_LOCK_TTL=5 bash "$L" gate S1 ); assert_exit 0 "$?" "gate: TTL=5, 10s-old foreign lock stale -> ok"
+  ( cd "$tmp" && LOOP_LOCK_TTL=3600 bash "$L" gate S1 ); assert_exit 1 "$?" "gate: TTL=3600, 10s-old foreign lock fresh -> stand down"
+  rm -rf "$tmp"
+}
+
 test_verifier_guard
 test_decision_gate
 test_stop_gate
 test_check_memory
+test_loop_lock
 test_budget
 test_gen_ci
 test_drive_next

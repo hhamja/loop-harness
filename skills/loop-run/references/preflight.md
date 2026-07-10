@@ -6,15 +6,29 @@ Run once before the first cycle. Skip entirely for `--verify-only`.
 
 Read `implementer:` from loop.config.md (a missing key means `claude`). If it is `codex`, run `codex --version` once via Bash. On failure, use claude for the entire run and record "codex unavailable, fell back to claude" in state.md and memory.md. Check once per run, never per cycle — `codex --version` succeeds on an installed-but-unauthenticated CLI, and the per-cycle fallback in `codex-exec.md` covers that.
 
-## Run marker
+## Run marker + worktree lock
 
-Write the marker so the Stop gate can tell an interrupted run from a finished one (one Bash command):
+Write the marker (so the Stop gate can tell an interrupted run from a finished one) and acquire the per-worktree loop lock (so a second concurrent loop in the same working tree can't entangle this one). One Bash block:
 
 ```bash
-sid="${CLAUDE_CODE_SESSION_ID:-unknown}"; [ -n "$sid" ] || sid=unknown; printf 'session_id=%s\ntimestamp=%s\n' "$sid" "$(date +%s)" > .claude/loop/.run-marker
+sid="${CLAUDE_CODE_SESSION_ID:-unknown}"; [ -n "$sid" ] || sid=unknown
+printf 'session_id=%s\ntimestamp=%s\n' "$sid" "$(date +%s)" > .claude/loop/.run-marker
+bash "${CLAUDE_PLUGIN_ROOT:-}/scripts/loop_lock.sh" acquire "$sid" "$$"; lock_rc=$?
 ```
 
 `CLAUDE_CODE_SESSION_ID` is version-dependent; `unknown` is the accepted fallback (the Stop gate then fails open).
+
+**If `lock_rc` is 1** another live session already owns this working tree — do NOT run cycles. Tell the user to run in a separate `git worktree`, stop that other session, or wait for the lock TTL (`LOOP_LOCK_TTL`, default 3600s) to expire; then end the turn. Any other outcome (0, or a non-1 error if the plugin path can't resolve) → proceed. The same-session marker + this lock are what let the `auto_commit`/`auto_push`/`auto_pr` Stop hooks fire ONLY for this session's loop and stand down for everyone else (`scripts/loop_lock.sh gate`).
+
+## Release the lock
+
+When the loop ends this turn with `loop_active: false` (green gate done → `ready_for_merge`, or `stalled`/`needs_branch`, or an aborted run), release the lock so the tree is free for the next session:
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT:-}/scripts/loop_lock.sh" release "${CLAUDE_CODE_SESSION_ID:-unknown}"
+```
+
+If the turn ends with `loop_active: true` (more cycles next turn), keep the lock — the next preflight refreshes it. A crashed run that never releases is covered by the TTL.
 
 ## Branch (never work on a protected branch)
 

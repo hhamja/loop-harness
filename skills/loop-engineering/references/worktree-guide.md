@@ -6,7 +6,7 @@ The MVP ships no command that uses worktrees. This documents the procedure and m
 
 1. Split the rubric into independent subsets. Tasks touching the same files are NOT independent — don't parallelize them.
 2. Per task: `git worktree add ../<repo>-<task> -b loop/<task>`
-3. Run one agent per worktree, scoped to its rubric subset.
+3. Run one agent per worktree, scoped to its rubric subset. Each worktree is a separate checkout with its own index/HEAD, so the per-worktree loop lock (`loop_lock.sh`, acquired at preflight) is satisfied independently — this is exactly why parallel loops need separate worktrees rather than one shared tree (a shared tree serializes: the second `loop-run` is refused by the lock).
 4. After merging (below): `git worktree remove ../<repo>-<task>` and delete the branch.
 
 ## Merge policy (mandatory)
