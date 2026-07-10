@@ -226,7 +226,7 @@ LLM-judge는 반드시 **사람 라벨로 캘리브레이션**한다. LLM-facing
 | **버전 드리프트** | 모델 업그레이드 후 조용한 행동 변화 | 모델 버전 핀 + 업그레이드를 eval 게이트 통과 대상으로 취급(코드 변경과 동일) |
 | **승인 피로** | 사람이 전부 승인 누름 | 요청 건수를 SLO로 관리. 초과 시 **자율성 설계 결함**으로 간주 |
 | **Flakiness** | 재현 안 되는 실패 | 멱등 재시도, flaky 격리, seed 고정 |
-| **공유 워킹트리 엉킴** | 한 워킹트리를 두 세션이 공유 → auto-commit(`git add -A`)이 상대 세션의 미커밋 변경까지 한 커밋에 스테이징, 히스토리 오염 | 자동 부수효과는 **하네스가 소유한 작업 단위**에만: 동일-세션 `.run-marker` 게이트(auto_* 훅) + 워킹트리당 단일-루프 락(`loop_lock.sh`, 두 번째 loop-run 거부) + 병렬 필요 시 worktree 격리(§2) |
+| **공유 워킹트리 엉킴** | 한 워킹트리를 두 세션이 공유 → auto-commit(`git add -A`)이 상대 세션의 미커밋 변경까지 한 커밋에 스테이징, 히스토리 오염 | 스테이징을 **세션 단위로 스코프**: PostToolUse가 세션별 `.touched-<sid>` 매니페스트를 기록하고, 다른 살아있는 세션이 감지되면(`loop_lock.sh others`) auto-commit이 `add -A` 대신 내 매니페스트 경로만 스테이징. 혼자면 기존 `add -A` 백스톱. auto_pr만 동일-세션 `.run-marker` 게이트 유지 + 워킹트리당 단일-루프 락(`loop_lock.sh`, 두 번째 loop-run 거부) + 병렬 필요 시 worktree 격리(§2) |
 
 ---
 
@@ -274,7 +274,7 @@ LLM-judge는 반드시 **사람 라벨로 캘리브레이션**한다. LLM-facing
 | 정책 게이트: 테스트/CI 변조 차단 (§4·7) | — 미탑재. 훅이 Bash만 감시해 Edit/Write 경로의 테스트·CI 파일 수정은 diff-path 게이트 없이 통과(§7 "테스트·CI 변경=비가역 T2" 미집행) | ✕ |
 | 홀드아웃 스위트 (§4) | — (architect 성숙도 L4 상한 사유) | ✕ |
 | Eval 골든셋 게이트 (§4) | — | ✕ |
-| 결정 게이트 T0/T1/T2 (§5) | `decision_gate.sh`(T2 차단) + `auto_commit`/`auto_push`/`auto_pr`(T0, Stop hook; **동일-세션 `.run-marker` + 워킹트리 락에 게이트** `loop_lock.sh` — 비-루프 턴·타세션에선 미발동) + `.gate-approved` 1회용 마커(15분 TTL) | ✅ |
+| 결정 게이트 T0/T1/T2 (§5) | `decision_gate.sh`(T2 차단) + `auto_commit`/`auto_push`(T0, Stop hook; 모든 세션에서 발동하되 **경합 시 스테이징을 세션 매니페스트로 스코프** — `touch_track.sh` + `loop_lock.sh others`) + `auto_pr`(동일-세션 `.run-marker` 게이트 유지) + `.gate-approved` 1회용 마커(15분 TTL) | ✅ |
 | 가역성 엔지니어링 (§5: canary·flag·tombstone) | — (architect L5 상한 사유) | ✕ |
 | 서킷브레이커 (§6) | `max_iterations` 캡 + 3연속 실패 → `replan`(`replan_max`) → escalate | ✅ |
 | kill-switch (§6) | `stop_gate.sh`(state 미갱신 시 턴 차단); repo 밖 독립 kill-switch 없음 | ⚠ |

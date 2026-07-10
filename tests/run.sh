@@ -441,8 +441,9 @@ mk_repo() {
     # local exclude so the seeded dotfiles below never show as untracked (keeps the
     # "clean tree" fixtures clean; no tracked file, no extra commit).
     printf '.claude/loop/.*\n' >> .git/info/exclude
-    # same-session run-marker: the auto_* hooks now gate on it (loop_lock.sh) —
-    # without it they stand down, so seed it for every hook fixture (session S1).
+    # same-session run-marker: auto_pr still gates on it (loop_lock.sh gate) —
+    # auto_commit/auto_push stopped requiring it in 0.13.0. Seed it so the PR
+    # fixtures pass and the commit/push fixtures prove they ignore it (session S1).
     printf 'session_id=S1\ntimestamp=1\n' > .claude/loop/.run-marker
     echo one > f1; git add f1; git commit -qm c1
   )
@@ -486,10 +487,11 @@ test_auto_push() {
   assert_contains "$out" "WOULD: git push -u origin feature/x" "no upstream: push -u origin branch"
   rm -rf "$tmp"
 
-  # session gate (P1): marker is session S1, but this turn is a DIFFERENT session -> stand down
+  # 0.13.0: no run-marker gate — an interactive session (marker belongs to S1)
+  # still pushes; commits are already session-scoped by auto_commit.
   tmp="$(mktemp -d)"; mk_repo "$tmp" "feature/x"
   out="$(autopush "$(printf '{"cwd":"%s/work","session_id":"OTHER"}' "$tmp")")"
-  assert_empty "$out" "foreign session: no push (loop_lock gate)"
+  assert_contains "$out" "WOULD: git push -u origin feature/x" "interactive/foreign session: push proceeds (no P1 gate)"
   rm -rf "$tmp"
 
   # guard 7b: upstream set, branch ahead -> plain push
@@ -568,10 +570,11 @@ test_auto_commit() {
   assert_contains "$out" "WOULD: git commit" "dirty branch: would commit"
   rm -rf "$tmp"
 
-  # session gate (P1): dirty tree but a DIFFERENT session than the marker -> no commit
+  # 0.13.0: no run-marker gate — an interactive session alone in the tree gets
+  # the full add -A backstop even though the marker belongs to another session.
   tmp="$(mktemp -d)"; mk_repo "$tmp" "feature/x"; echo dirty > "$tmp/work/f2"
   out="$(autocommit "$(printf '{"cwd":"%s/work","session_id":"OTHER"}' "$tmp")")"
-  assert_empty "$out" "foreign session: no commit (loop_lock gate)"
+  assert_contains "$out" "WOULD: git commit" "interactive session, alone: commits (P1 gate removed)"
   rm -rf "$tmp"
 
   # local commit is T0 even on a protected branch (direct-to-main workflow)
@@ -609,6 +612,46 @@ test_auto_commit() {
   echo dirty > "$tmp/work/f2"
   out="$(autocommit "$(printf '{"cwd":"%s/work","session_id":"S1"}' "$tmp")")"
   assert_contains "$out" "WOULD: git commit (1 files)" "worker: source counted, loop files not"
+  rm -rf "$tmp"
+
+  # contended (fresh foreign lock) + no manifest of mine -> stand down
+  tmp="$(mktemp -d)"; mk_repo "$tmp" "feature/x"; echo dirty > "$tmp/work/f2"
+  printf 'session_id=PEER\npid=1\nepoch=%s\n' "$(date +%s)" > "$tmp/work/.claude/loop/.session-lock"
+  out="$(autocommit "$(printf '{"cwd":"%s/work","session_id":"S1"}' "$tmp")")"
+  assert_empty "$out" "contended + no manifest: no commit"
+  rm -rf "$tmp"
+
+  # contended dryrun: only MY manifest paths count (f2 mine, f3 the peer's).
+  # tmp is physical-path-normalized: manifest entries must share the toplevel prefix.
+  tmp="$(mktemp -d)"; tmp="$(cd "$tmp" && pwd -P)"; mk_repo "$tmp" "feature/x"
+  echo mine > "$tmp/work/f2"; echo theirs > "$tmp/work/f3"
+  printf 'session_id=PEER\npid=1\nepoch=%s\n' "$(date +%s)" > "$tmp/work/.claude/loop/.session-lock"
+  printf '%s/work/f2\n' "$tmp" > "$tmp/work/.claude/loop/.touched-S1"
+  out="$(autocommit "$(printf '{"cwd":"%s/work","session_id":"S1"}' "$tmp")")"
+  assert_contains "$out" "WOULD: git commit (1 files)" "contended: only my manifest path counts"
+  rm -rf "$tmp"
+
+  # contended real run: my file committed, the peer's stays dirty, manifest cleared
+  tmp="$(mktemp -d)"; tmp="$(cd "$tmp" && pwd -P)"; mk_repo "$tmp" "feature/x"
+  echo mine > "$tmp/work/f2"; echo theirs > "$tmp/work/f3"
+  printf 'session_id=PEER\npid=1\nepoch=%s\n' "$(date +%s)" > "$tmp/work/.claude/loop/.session-lock"
+  printf '%s/work/f2\n' "$tmp" > "$tmp/work/.claude/loop/.touched-S1"
+  printf '{"cwd":"%s/work","session_id":"S1"}' "$tmp" | bash "$SCRIPTS/auto_commit.sh" >/dev/null 2>&1
+  out="$(git -C "$tmp/work" show --name-only --format= HEAD)"
+  assert_contains "$out" "f2" "contended real run: my file committed"
+  case "$out" in *f3*) bad "contended real run: peer file NOT committed" "f3 in commit" ;; *) ok "contended real run: peer file NOT committed" ;; esac
+  out="$(git -C "$tmp/work" status --porcelain)"
+  assert_contains "$out" "f3" "contended real run: peer file still dirty"
+  if [ -f "$tmp/work/.claude/loop/.touched-S1" ]; then bad "contended real run: manifest cleared" "still present"; else ok "contended real run: manifest cleared"; fi
+  rm -rf "$tmp"
+
+  # stale foreign manifest -> treated as alone: full add -A sweep (2 files)
+  tmp="$(mktemp -d)"; mk_repo "$tmp" "feature/x"
+  echo mine > "$tmp/work/f2"; echo leftover > "$tmp/work/f3"
+  echo /x/old > "$tmp/work/.claude/loop/.touched-GONE"
+  touch -t 202001010000 "$tmp/work/.claude/loop/.touched-GONE"
+  out="$(autocommit "$(printf '{"cwd":"%s/work","session_id":"S1"}' "$tmp")")"
+  assert_contains "$out" "WOULD: git commit (2 files)" "stale foreign manifest: alone -> full sweep"
   rm -rf "$tmp"
 
   # worker mode real run: sources + results/<task>.md committed, shared state NOT
@@ -863,6 +906,55 @@ test_loop_lock() {
   ( cd "$tmp" && LOOP_LOCK_TTL=5 bash "$L" gate S1 ); assert_exit 0 "$?" "gate: TTL=5, 10s-old foreign lock stale -> ok"
   ( cd "$tmp" && LOOP_LOCK_TTL=3600 bash "$L" gate S1 ); assert_exit 1 "$?" "gate: TTL=3600, 10s-old foreign lock fresh -> stand down"
   rm -rf "$tmp"
+
+  # others — is a DIFFERENT live session present? (fresh lock or fresh foreign manifest)
+  tmp="$(mktemp -d)"; mkdir -p "$tmp/.claude/loop"
+  ( cd "$tmp" && bash "$L" others S1 ); assert_exit 1 "$?" "others: empty tree -> alone"
+  printf 'session_id=OTHER\npid=1\nepoch=%s\n' "$(date +%s)" > "$tmp/.claude/loop/.session-lock"
+  ( cd "$tmp" && bash "$L" others S1 ); assert_exit 0 "$?" "others: foreign fresh lock -> present"
+  ( cd "$tmp" && bash "$L" others OTHER ); assert_exit 1 "$?" "others: own fresh lock -> alone"
+  printf 'session_id=OTHER\npid=1\nepoch=1\n' > "$tmp/.claude/loop/.session-lock"
+  ( cd "$tmp" && bash "$L" others S1 ); assert_exit 1 "$?" "others: stale foreign lock -> alone"
+  rm -f "$tmp/.claude/loop/.session-lock"
+  echo /x/f1 > "$tmp/.claude/loop/.touched-OTHER"
+  ( cd "$tmp" && bash "$L" others S1 ); assert_exit 0 "$?" "others: fresh foreign manifest -> present"
+  ( cd "$tmp" && bash "$L" others OTHER ); assert_exit 1 "$?" "others: own manifest only -> alone"
+  touch -t 202001010000 "$tmp/.claude/loop/.touched-OTHER"
+  ( cd "$tmp" && bash "$L" others S1 ); assert_exit 1 "$?" "others: stale foreign manifest -> alone"
+  echo /x/f1 > "$tmp/.claude/loop/.touched-OTHER"
+  ( cd "$tmp" && LOOP_LOCK_DISABLE=1 bash "$L" others S1 ); assert_exit 1 "$?" "others: LOOP_LOCK_DISABLE -> alone"
+  rm -rf "$tmp"
+}
+
+# ── touch_track.sh: PostToolUse hook that records this session's edited files ──
+tt() { printf '%s' "$1" | bash "$SCRIPTS/touch_track.sh"; }
+
+test_touch_track() {
+  printf '\ntouch_track.sh\n'
+  local tmp out
+
+  # not a loop project -> writes nothing
+  tmp="$(mktemp -d)"
+  tt "$(printf '{"cwd":"%s","session_id":"S1","tool_input":{"file_path":"%s/a.txt"}}' "$tmp" "$tmp")"
+  if [ -e "$tmp/.claude/loop/.touched-S1" ]; then bad "no loop dir: no manifest" "file exists"; else ok "no loop dir: no manifest"; fi
+  rm -rf "$tmp"
+
+  # records file_path into the per-session manifest, appending across calls
+  tmp="$(mktemp -d)"; mkdir -p "$tmp/.claude/loop"
+  tt "$(printf '{"cwd":"%s","session_id":"S1","tool_input":{"file_path":"%s/a.txt"}}' "$tmp" "$tmp")"
+  tt "$(printf '{"cwd":"%s","session_id":"S1","tool_input":{"file_path":"%s/b.txt"}}' "$tmp" "$tmp")"
+  out="$(cat "$tmp/.claude/loop/.touched-S1" 2>/dev/null)"
+  assert_contains "$out" "$tmp/a.txt" "records first file_path"
+  assert_contains "$out" "$tmp/b.txt" "appends second file_path"
+
+  # tool_input without file_path -> writes nothing
+  tt "$(printf '{"cwd":"%s","session_id":"S2","tool_input":{"command":"ls"}}' "$tmp")"
+  if [ -e "$tmp/.claude/loop/.touched-S2" ]; then bad "no file_path: no manifest" "file exists"; else ok "no file_path: no manifest"; fi
+
+  # hostile session id is reduced to a filename-safe manifest name
+  tt "$(printf '{"cwd":"%s","session_id":"../evil","tool_input":{"file_path":"%s/c.txt"}}' "$tmp" "$tmp")"
+  if [ -f "$tmp/.claude/loop/.touched-..evil" ]; then ok "sid sanitized for filename"; else bad "sid sanitized for filename" "expected .touched-..evil"; fi
+  rm -rf "$tmp"
 }
 
 test_verifier_guard
@@ -870,6 +962,7 @@ test_decision_gate
 test_stop_gate
 test_check_memory
 test_loop_lock
+test_touch_track
 test_budget
 test_gen_ci
 test_drive_next

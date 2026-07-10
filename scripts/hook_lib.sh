@@ -58,6 +58,31 @@ except Exception:
   fi
 }
 
+# tool_str <key> — first string field from INPUT's tool_input object. Same
+# three tiers and fail-open contract as bash_cmd (jq exact, python3 exact,
+# sed crude last resort); callers treat empty as "not present".
+tool_str() {
+  if command -v jq >/dev/null 2>&1; then
+    printf '%s' "$INPUT" | jq -r ".tool_input.\"$1\" // empty" 2>/dev/null || true
+  elif command -v python3 >/dev/null 2>&1; then
+    printf '%s' "$INPUT" | python3 -c 'import json,sys
+try:
+    v = json.load(sys.stdin).get("tool_input", {}).get(sys.argv[1], "")
+    print(v if isinstance(v, str) else "")
+except Exception:
+    pass' "$1" 2>/dev/null || true
+  else
+    printf '%s' "$INPUT" | sed -n "s/.*\"$1\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/p" | head -n1
+  fi
+}
+
+# sid_safe <sid> — session id reduced to filename-safe chars (it names the
+# per-session .touched-<sid> manifest); empty in -> "unknown" out.
+sid_safe() {
+  local s; s="$(printf '%s' "${1:-}" | tr -cd 'A-Za-z0-9._-')"
+  printf '%s' "${s:-unknown}"
+}
+
 # config_field <key> — first `key: value` line from loop.config.md, raw
 # (empty when the file or key is absent). Callers own default/TODO handling.
 config_field() {

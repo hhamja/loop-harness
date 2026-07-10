@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.13.0 — 2026-07-10
+
+- **Auto commit/push in EVERY session — the shared-tree fix moves from gating WHO to scoping WHAT.** 0.12.0 stopped the `git add -A` entanglement by making `auto_commit`/`auto_push` stand down unless the session had run a loop (`.run-marker` P1) — which also meant interactive sessions got no turn-end automation at all. Now:
+  - **`touch_track.sh`** (new PostToolUse hook on `Edit|Write|NotebookEdit`): records every file the session changes into a per-session manifest `.claude/loop/.touched-<sid>`. One append, no git calls.
+  - **`auto_commit.sh`**: the P1 gate is gone. Alone in the tree (no fresh peer) -> `git add -A` backstop, exactly as before. A DIFFERENT live session present (`loop_lock.sh others`: fresh `.session-lock` by another sid, or a fresh foreign manifest) -> stage ONLY this session's manifest paths, so two sessions in one tree both commit without sweeping each other's work. Manifest is cleared on commit; stale manifests (idle past the lock TTL) are GC'd.
+  - **`auto_push.sh`**: gate gone too — a push publishes commits, and commits are now session-scoped, so a work-branch push is safe from any session. All other guards (protected branches, `gate_push`, `ci_local.sh` red) unchanged.
+  - **`auto_pr.sh`**: still loop-gated (same-session `.run-marker`) — interactive sessions open PRs deliberately, not on every Stop.
+  - Ceiling (by design): while contended, Bash side effects (lockfiles, codegen) are not in the manifest and stay uncommitted until the tree is uncontended. Upgrade path: snapshot `git status` around Bash calls.
+  - New `loop_lock.sh others` subcommand + `sid_safe`/`tool_str` in `hook_lib.sh`; `hooks.json` gains the PostToolUse entry (installed-version bump required — this release). Tests: contended/alone/stale-manifest commit scoping, foreign-session push, touch_track recording + sid sanitization, `others` matrix.
+
 ## 0.12.3 — 2026-07-10
 
 - **`scripts/hook_lib.sh`: one home for the parsing every gate script copy-pasted.** Ponytail-review finding: the hook/gate scripts each hand-rolled the same stdin/cwd preamble, JSON field extraction, and — the part that matters — the `loop.config.md` parse. `protected_branches` parsed in four places was a gate-consistency risk: a drift between `decision_gate` and `auto_push`/`auto_pr`/`branch_guard` is a gate hole, not a style issue. Now `hook_init`/`json_str`/`bash_cmd`/`stop_hook_active`/`hook_debug`/`config_field`/`cfg_flag`/`protected_re` live in one sourced lib. Behavior identical — every pre-existing test passes unmodified. Also: merged the `rm -rf`/`-fr` flag-order regexes into one (plus a new `-fr` deny test), and dropped the dead `commands/*.md` glob from `check_budget.sh` (the legacy dir is long gone). `hooks.json` unchanged — no installed-version skew. Net −65 lines; 161 tests, `ci_local.sh` ALL GREEN.

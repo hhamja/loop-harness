@@ -5,6 +5,7 @@
 # act autonomously, never re-ask" (references/decision-gates.md). decision_gate.sh
 # BLOCKS pushing a protected branch; this hook is its complement — it PUSHES the
 # current work branch at turn end so the human never has to say "and push it".
+# Interactive and loop sessions alike: since 0.13.0 no .run-marker is required.
 #
 # Push ONLY if every guard holds — fail-open (exit 0, no push) on any doubt:
 #   1. .claude/loop/ exists                (else: non-loop session, do nothing)
@@ -39,11 +40,10 @@ hook_debug auto_push
 # --- guard 2: already re-prompted once (avoid pushing mid-block) ---
 stop_hook_active && exit 0
 
-# --- session/loop gate (P1+P2): act only when THIS session actually ran a loop
-# here (same-session .run-marker) AND no different fresh session holds the worktree
-# lock. This is what stops a shared-working-tree session from auto-pushing another
-# session's changes. Logic + tests: scripts/loop_lock.sh. ---
-bash "$SCRIPT_DIR/loop_lock.sh" gate "$(json_str session_id)" || exit 0
+# (No session/loop gate since 0.13.0: pushing publishes COMMITS, and commits are
+# already correctly scoped per session by auto_commit's manifest staging — so a
+# work-branch push is safe from any session, interactive or loop. The shared-tree
+# entanglement lived in `git add -A`, not in push.)
 
 # --- guard 3 & 4: disabled, or a direct-to-main repo where every push is a gate
 # (config accessors: hook_lib.sh — the same parse decision_gate enforces with) ---

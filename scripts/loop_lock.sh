@@ -13,6 +13,11 @@
 #                             (this session actually ran a loop here).
 #                         P2: never act while a DIFFERENT fresh session holds
 #                             .session-lock.
+#   others <cur_sid>      exit 0 = a DIFFERENT live session is present in this
+#                         tree (fresh .session-lock by another sid, or a fresh
+#                         foreign .touched-* manifest). auto_commit narrows its
+#                         staging to this session's manifest on 0, sweeps with
+#                         add -A on 1. <cur_sid> is reduced to its sid_safe form.
 #   acquire <sid> <pid>   take/refresh .session-lock. exit 0 = owned by <sid>,
 #                         exit 1 = a different fresh session owns it (refuse).
 #   release <sid>         drop .session-lock if owned by <sid> (or stale/absent).
@@ -47,6 +52,16 @@ lock_is_stale() {
 
 write_lock() { printf 'session_id=%s\npid=%s\nepoch=%s\n' "$1" "$2" "$(now)" > "$LOCK"; }
 
+# file_fresh <path> — 0 (true) when the file's mtime is within TTL. BSD stat
+# first (this repo's primary platform), GNU stat fallback (CI). Unreadable
+# mtime -> not fresh (fails toward "alone": the wider add -A backstop).
+file_fresh() {
+  local e
+  e="$(stat -f %m "$1" 2>/dev/null || stat -c %Y "$1" 2>/dev/null || echo)"
+  case "$e" in ''|*[!0-9]*) return 1 ;; esac
+  [ $(( $(now) - e )) -le "$TTL" ]
+}
+
 cmd_gate() {
   local cur_sid="${1:-}"
   [ "${LOOP_LOCK_DISABLE:-}" = "1" ] && return 0
@@ -67,6 +82,31 @@ cmd_gate() {
     fi
   fi
   return 0
+}
+
+cmd_others() {
+  local cur_sid="${1:-}"
+  [ "${LOOP_LOCK_DISABLE:-}" = "1" ] && return 1
+  # reduce to the same filename-safe form touch_track names manifests with
+  cur_sid="$(printf '%s' "$cur_sid" | tr -cd 'A-Za-z0-9._-')"
+  [ -n "$cur_sid" ] || cur_sid="unknown"
+
+  # a fresh lock held by a different known session
+  if [ -f "$LOCK" ] && ! lock_is_stale; then
+    local l_sid; l_sid="$(field "$LOCK" session_id)"
+    if known "$l_sid" && [ "$l_sid" != "$cur_sid" ]; then
+      return 0
+    fi
+  fi
+
+  # a fresh foreign manifest: another session edited files here within TTL
+  local m
+  for m in "$LOOP_DIR"/.touched-*; do
+    [ -f "$m" ] || continue
+    [ "$m" = "$LOOP_DIR/.touched-$cur_sid" ] && continue
+    if file_fresh "$m"; then return 0; fi
+  done
+  return 1
 }
 
 cmd_acquire() {
@@ -115,7 +155,8 @@ cmd_release() {
 
 case "${1:-}" in
   gate)    shift; cmd_gate "$@";    exit $? ;;
+  others)  shift; cmd_others "$@"; exit $? ;;
   acquire) shift; cmd_acquire "$@"; exit $? ;;
   release) shift; cmd_release "$@"; exit $? ;;
-  *) printf 'usage: loop_lock.sh {gate <sid>|acquire <sid> <pid>|release <sid>}\n' >&2; exit 2 ;;
+  *) printf 'usage: loop_lock.sh {gate <sid>|others <sid>|acquire <sid> <pid>|release <sid>}\n' >&2; exit 2 ;;
 esac
