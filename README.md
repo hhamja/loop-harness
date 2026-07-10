@@ -77,6 +77,12 @@ Loops, verifiers and subagents consume tokens — always weigh cost against the 
 ln -s "$PWD/scripts/fleet.sh" ~/.local/bin/fleet   # then: fleet   (or: fleet --watch)
 ```
 
+`--swiftbar` emits [SwiftBar](https://github.com/swiftbar/SwiftBar) plugin format for a menubar dashboard — `⏳W ▶B` counts in the macOS menubar, dropdown with every session. Point a shim in your SwiftBar plugin folder at it:
+
+```
+printf '#!/bin/bash\nexec bash "$HOME/develop/loop-harness/scripts/fleet.sh" --swiftbar\n' > ~/.swiftbar/fleet.5s.sh && chmod +x ~/.swiftbar/fleet.5s.sh
+```
+
 ## Boundary principles
 
 1. **"Done" is a claim, not a proof** — the final verification belongs to a human.

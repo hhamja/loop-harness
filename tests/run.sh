@@ -712,6 +712,14 @@ test_fleet() {
   assert_contains "$out" "alive-empty" "live PID w/ empty status: shown"
   case "$out" in *dead-one*) bad "dead PID: hidden" "dead-one present" ;; *) ok "dead PID: hidden" ;; esac
   assert_contains "$out" "1 stale" "dead PID counted as stale"
+
+  # --swiftbar: menubar title with waiting count, --- separator, dead PID still hidden
+  out="$(FLEET_SESSIONS_DIR="$tmp" bash "$SCRIPTS/fleet.sh" --swiftbar 2>&1)"
+  assert_contains "$out" "⏳1" "swiftbar: waiting count in title"
+  assert_contains "$out" "---" "swiftbar: dropdown separator"
+  assert_contains "$out" "alive-wait" "swiftbar: live session listed"
+  case "$out" in *dead-one*) bad "swiftbar: dead PID hidden" "dead-one present" ;; *) ok "swiftbar: dead PID hidden" ;; esac
+  assert_contains "$out" "1 stale" "swiftbar: stale count in footer"
   rm -rf "$tmp"
 }
 

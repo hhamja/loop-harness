@@ -9,7 +9,9 @@
 # The data is machine-wide regardless of where you run this from — a session in
 # any project shows up. Symlink it onto PATH to run `fleet` from anywhere.
 #
-# Usage: fleet [--watch [SECONDS]] [--help]
+# Usage: fleet [--watch [SECONDS]] [--swiftbar] [--help]
+#   --swiftbar emits SwiftBar/xbar plugin format (menubar title, ---, dropdown);
+#   point a shim in your SwiftBar plugin folder at `fleet.sh --swiftbar`.
 # Env:   FLEET_SESSIONS_DIR   override sessions dir (default ~/.claude/sessions; used by tests)
 
 set -u
@@ -30,6 +32,7 @@ fleet — live Claude Code sessions across all projects, waiting-for-input first
 
   fleet                 print once
   fleet --watch [SECS]  refresh every SECS seconds (default 2); Ctrl-C to quit
+  fleet --swiftbar      SwiftBar/xbar plugin output (menubar title + dropdown)
   fleet --help          this help
 
 Env: FLEET_SESSIONS_DIR   override the sessions dir (default ~/.claude/sessions)
@@ -64,12 +67,16 @@ colorize() {
   done
 }
 
-render() {
-  local now_ms live=0 stale=0 rows='' f
+# Read the sessions dir once. Sets globals:
+#   ROWS  — sorted rows "status<TAB>pid<TAB>name<TAB>branch<TAB>cwd<TAB>idle" (all fields non-empty)
+#   LIVE / STALE — counts
+collect() {
+  local now_ms f rows=''
+  LIVE=0; STALE=0; ROWS=''
   now_ms=$(( $(date +%s) * 1000 ))
 
   for f in "$SESS_DIR"/*.json; do
-    local pid name status kind updated cwd branch idle idle_str cwd_base key row
+    local pid name status kind updated cwd branch idle idle_str cwd_base key
     # One field per line, read one line each: an empty field stays an empty line.
     # (A tab/space delimiter is IFS-whitespace and would collapse empties, shifting columns.)
     { IFS= read -r pid; IFS= read -r name; IFS= read -r status
@@ -77,8 +84,8 @@ render() {
     } < <(jq -r '.pid,(.name//""),(.status//""),(.kind//""),(.updatedAt//0),(.cwd//"")' "$f" 2>/dev/null)
 
     [ -z "${pid:-}" ] && continue
-    kill -0 "$pid" 2>/dev/null || { stale=$(( stale + 1 )); continue; }
-    live=$(( live + 1 ))
+    kill -0 "$pid" 2>/dev/null || { STALE=$(( STALE + 1 )); continue; }
+    LIVE=$(( LIVE + 1 ))
 
     [ -z "$name" ] && name='-'
     [ "$kind" = 'bg' ] && name="$name (bg)"
@@ -99,29 +106,67 @@ render() {
 
     cwd_base='-'; [ -n "$cwd" ] && cwd_base=$(basename "$cwd")
     key=$(status_key "$status")
-    row=$(printf '%s\t%s\t%s\t%s\t%s\t%s\t%s' "$key" "$status" "$pid" "$name" "$branch" "$cwd_base" "$idle_str")
-    rows+="$row"$'\n'
+    rows+=$(printf '%s\t%s\t%s\t%s\t%s\t%s\t%s' "$key" "$status" "$pid" "$name" "$branch" "$cwd_base" "$idle_str")$'\n'
   done
 
-  if [ "$live" -eq 0 ]; then
+  [ -n "$rows" ] && ROWS="$(printf '%s' "$rows" | sort -t$'\t' -k1,1n -k4,4 | cut -f2-)"
+}
+
+render() {
+  collect
+
+  if [ "$LIVE" -eq 0 ]; then
     printf 'No live Claude Code sessions.'
-    [ "$stale" -gt 0 ] && printf '  (%d stale)' "$stale"
+    [ "$STALE" -gt 0 ] && printf '  (%d stale)' "$STALE"
     printf '\n'
     return
   fi
 
-  # header + rows sorted by status-key then name, sort-key column stripped, aligned, colored.
   {
     printf 'STATUS\tPID\tNAME\tBRANCH\tCWD\tIDLE\n'
-    printf '%s' "$rows" | sort -t$'\t' -k1,1n -k4,4 | cut -f2-
+    printf '%s\n' "$ROWS"
   } | column -t -s$'\t' | colorize
 
-  printf -- '-- %d live, %d stale\n' "$live" "$stale"
+  printf -- '-- %d live, %d stale\n' "$LIVE" "$STALE"
+}
+
+# SwiftBar/xbar plugin format: menubar title, "---", one dropdown line per session.
+render_swiftbar() {
+  collect
+  local w=0 b=0 status pid name branch cwd idle icon color title=''
+
+  if [ -n "$ROWS" ]; then
+    while IFS=$'\t' read -r status pid name branch cwd idle; do
+      case "$status" in waiting) w=$(( w + 1 )) ;; busy) b=$(( b + 1 )) ;; esac
+    done <<< "$ROWS"
+  fi
+
+  [ "$w" -gt 0 ] && title="⏳$w"
+  [ "$b" -gt 0 ] && title="${title:+$title }▶$b"
+  [ -z "$title" ] && title="🤖$LIVE"
+  printf '%s\n---\n' "$title"
+
+  if [ "$LIVE" -eq 0 ]; then
+    printf 'No live Claude Code sessions\n'
+  else
+    while IFS=$'\t' read -r status pid name branch cwd idle; do
+      case "$status" in
+        waiting) icon='⏳'; color='orange' ;;
+        busy)    icon='▶';  color='green' ;;
+        idle)    icon='○';  color='gray' ;;
+        *)       icon='·';  color='gray' ;;
+      esac
+      printf '%s %s — %s · %s · %s | color=%s\n' "$icon" "$name" "$cwd" "$branch" "$idle" "$color"
+    done <<< "$ROWS"
+  fi
+
+  printf -- '---\n%d live · %d stale\n' "$LIVE" "$STALE"
 }
 
 case "${1:-}" in
-  -h|--help) usage ;;
-  --watch)   secs="${2:-2}"; while :; do clear; render; sleep "$secs"; done ;;
-  '')        render ;;
-  *)         usage; exit 2 ;;
+  -h|--help)  usage ;;
+  --watch)    secs="${2:-2}"; while :; do clear; render; sleep "$secs"; done ;;
+  --swiftbar) render_swiftbar ;;
+  '')         render ;;
+  *)          usage; exit 2 ;;
 esac

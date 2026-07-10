@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.11.1 — 2026-07-10
+
+- **`fleet.sh --swiftbar`: the fleet as a macOS menubar dashboard.** Same data pipeline (collect() extracted so the table and SwiftBar renderers share one source), emitted in SwiftBar/xbar plugin format: menubar title `⏳W ▶B` (waiting count always visible without opening anything), dropdown listing every live session with name · project · branch · idle, color-coded (waiting=orange, busy=green, idle=gray), stale count in the footer. A 3-line shim in the SwiftBar plugin folder (`~/.swiftbar/fleet.5s.sh`) execs the repo script, so logic stays versioned here. Covered by swiftbar-mode assertions in the existing `test_fleet` fixture.
+
 ## 0.11.0 — 2026-07-10
 
 - **`scripts/fleet.sh`: an at-a-glance view of every live Claude Code session on the machine.** Running many parallel sessions across projects, you lose track of which are working, which are done, and — the one that actually costs you — which are *silently waiting for input*. fleet reads `~/.claude/sessions/<PID>.json` (Claude Code already writes each session's `name`/`status`/`cwd`/`updatedAt` there live and rewrites it on every transition), reconciles against `kill -0` to drop dead PIDs, and prints a table sorted **waiting → busy → idle** with whole-row color emphasis on waiting. No hooks, no transcript parsing, no new dependency (just `jq`); read-only and independent of `.claude/loop/`. `--watch [secs]` auto-refreshes in a spare terminal.
