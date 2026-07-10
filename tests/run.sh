@@ -779,6 +779,15 @@ test_fleet() {
   assert_contains "$out" "alive-wait" "swiftbar: live session listed"
   case "$out" in *dead-one*) bad "swiftbar: dead PID hidden" "dead-one present" ;; *) ok "swiftbar: dead PID hidden" ;; esac
   assert_contains "$out" "1 stale" "swiftbar: stale count in footer"
+  assert_contains "$out" "param1=--focus" "swiftbar: rows carry focus click action"
+
+  # --focus: arg validation (actual window-raising is interactive, not tested here)
+  FLEET_SESSIONS_DIR="$tmp" bash "$SCRIPTS/fleet.sh" --focus >/dev/null 2>&1
+  assert_exit 2 "$?" "focus: missing pid -> exit 2"
+  FLEET_SESSIONS_DIR="$tmp" bash "$SCRIPTS/fleet.sh" --focus 999999 >/dev/null 2>&1
+  assert_exit 1 "$?" "focus: dead pid -> exit 1"
+  FLEET_SESSIONS_DIR="$tmp" bash "$SCRIPTS/fleet.sh" --focus 424242 >/dev/null 2>&1
+  assert_exit 1 "$?" "focus: unknown pid -> exit 1"
   rm -rf "$tmp"
 }
 

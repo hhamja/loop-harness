@@ -77,7 +77,7 @@ Loops, verifiers and subagents consume tokens — always weigh cost against the 
 ln -s "$PWD/scripts/fleet.sh" ~/.local/bin/fleet   # then: fleet   (or: fleet --watch)
 ```
 
-`--swiftbar` emits [SwiftBar](https://github.com/swiftbar/SwiftBar) plugin format for a menubar dashboard — `⏳W ▶B` counts in the macOS menubar, dropdown with every session. Point a shim in your SwiftBar plugin folder at it:
+`--swiftbar` emits [SwiftBar](https://github.com/swiftbar/SwiftBar) plugin format for a menubar dashboard — `⏳W ▶B` counts in the macOS menubar, dropdown with every session. **Clicking a row raises the window hosting that session** (`--focus PID`: walks the session's process ancestry to the owning app bundle — VS Code/Cursor included — and opens its cwd through the app's bundled CLI, which focuses the existing window; window-level, the terminal tab inside is yours to pick). Point a shim in your SwiftBar plugin folder at it:
 
 ```
 printf '#!/bin/bash\nexec bash "$HOME/develop/loop-harness/scripts/fleet.sh" --swiftbar\n' > ~/.swiftbar/fleet.5s.sh && chmod +x ~/.swiftbar/fleet.5s.sh

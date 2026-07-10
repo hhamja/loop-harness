@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.12.1 — 2026-07-10
+
+- **`fleet.sh --focus PID`: click a menubar row, land in that session's window.** Every SwiftBar dropdown row now carries a click action (`bash=… param1=--focus param2=<pid>`). Focus walks the session PID's process ancestry to the owning `.app` bundle — so it works for VS Code *and* Cursor, including AppTranslocation installs, with no hardcoded CLI path — then opens the session's cwd through the app's bundled CLI (`bin/code`/`bin/cursor`), which macOS resolves to *raising the already-open window* for that folder; non-Electron terminals fall back to an AppleScript app-level activate. Window-level by design: VS Code exposes no external API to focus a specific terminal tab, so picking the tab inside the raised window stays manual. Arg-validation covered in `test_fleet` (missing/dead/unknown pid); the raise itself verified live.
+
 ## 0.12.0 — 2026-07-10
 
 - **Working-tree isolation: one tree = one writing loop, parallelism = worktrees.** Root fix for the concurrent-session entanglement where two sessions sharing one checkout got their unrelated changes bundled into one auto-commit (`git add -A` grabs everything; hooks fire on every Stop). Two complementary halves:

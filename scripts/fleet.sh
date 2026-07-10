@@ -9,15 +9,17 @@
 # The data is machine-wide regardless of where you run this from — a session in
 # any project shows up. Symlink it onto PATH to run `fleet` from anywhere.
 #
-# Usage: fleet [--watch [SECONDS]] [--swiftbar] [--help]
+# Usage: fleet [--watch [SECONDS]] [--swiftbar] [--focus PID] [--help]
 #   --swiftbar emits SwiftBar/xbar plugin format (menubar title, ---, dropdown);
 #   point a shim in your SwiftBar plugin folder at `fleet.sh --swiftbar`.
+#   --focus raises the window hosting that session (wired to SwiftBar row clicks).
 # Env:   FLEET_SESSIONS_DIR   override sessions dir (default ~/.claude/sessions; used by tests)
 
 set -u
 shopt -s nullglob
 
 SESS_DIR="${FLEET_SESSIONS_DIR:-$HOME/.claude/sessions}"
+SELF="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"   # absolute path for SwiftBar click actions
 
 # ANSI colors only on a real terminal; empty (and colorize() cats through) otherwise.
 if [ -t 1 ]; then
@@ -33,6 +35,7 @@ fleet — live Claude Code sessions across all projects, waiting-for-input first
   fleet                 print once
   fleet --watch [SECS]  refresh every SECS seconds (default 2); Ctrl-C to quit
   fleet --swiftbar      SwiftBar/xbar plugin output (menubar title + dropdown)
+  fleet --focus PID     raise the window hosting that session (SwiftBar row click)
   fleet --help          this help
 
 Env: FLEET_SESSIONS_DIR   override the sessions dir (default ~/.claude/sessions)
@@ -156,17 +159,52 @@ render_swiftbar() {
         idle)    icon='○';  color='gray' ;;
         *)       icon='·';  color='gray' ;;
       esac
-      printf '%s %s — %s · %s · %s | color=%s\n' "$icon" "$name" "$cwd" "$branch" "$idle" "$color"
+      printf '%s %s — %s · %s · %s | color=%s bash="%s" param1=--focus param2=%s terminal=false refresh=false\n' \
+        "$icon" "$name" "$cwd" "$branch" "$idle" "$color" "$SELF" "$pid"
     done <<< "$ROWS"
   fi
 
   printf -- '---\n%d live · %d stale\n' "$LIVE" "$STALE"
 }
 
+# Raise the window hosting session $1 (wired to SwiftBar row clicks).
+# Walks the session PID's ancestors to the owning .app bundle — works for
+# VS Code/Cursor including AppTranslocation paths, no hardcoded CLI location —
+# then opens the session's cwd through the app's bundled CLI: an already-open
+# folder focuses its existing window. Window-level only: VS Code exposes no
+# external API to focus a specific terminal *tab* inside the window.
+focus_session() {
+  local pid=$1 f cwd cur app='' cli path
+  f="$SESS_DIR/$pid.json"
+  [ -f "$f" ] || { echo "fleet: no session file for pid $pid" >&2; exit 1; }
+  kill -0 "$pid" 2>/dev/null || { echo "fleet: session $pid is not alive" >&2; exit 1; }
+  cwd=$(jq -r '.cwd//""' "$f" 2>/dev/null)
+
+  cur=$pid
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    cur=$(ps -o ppid= -p "$cur" 2>/dev/null | tr -d ' ')
+    [ -z "$cur" ] && break
+    [ "$cur" -le 1 ] && break
+    path=$(ps -o comm= -p "$cur" 2>/dev/null)   # full executable path on macOS
+    case "$path" in
+      */Contents/MacOS/*) app="${path%%/Contents/MacOS/*}"; break ;;
+    esac
+  done
+  [ -n "$app" ] || { echo "fleet: no app window found for pid $pid (bg session?)" >&2; exit 1; }
+
+  for cli in code cursor; do   # VS Code ships bin/code, Cursor ships both
+    if [ -n "$cwd" ] && [ -x "$app/Contents/Resources/app/bin/$cli" ]; then
+      exec "$app/Contents/Resources/app/bin/$cli" "$cwd"
+    fi
+  done
+  exec osascript -e "tell application \"$app\" to activate"   # other terminal apps: app-level raise
+}
+
 case "${1:-}" in
   -h|--help)  usage ;;
   --watch)    secs="${2:-2}"; while :; do clear; render; sleep "$secs"; done ;;
   --swiftbar) render_swiftbar ;;
+  --focus)    [ -n "${2:-}" ] || { usage; exit 2; }; focus_session "$2" ;;
   '')         render ;;
   *)          usage; exit 2 ;;
 esac
