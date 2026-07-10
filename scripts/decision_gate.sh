@@ -96,7 +96,7 @@ approved() {
   # freshness (15 min); missing/garbage ts -> treat as expired
   case "$t" in ''|*[!0-9]*) return 1 ;; esac
   now="$(date +%s 2>/dev/null || echo 0)"
-  [ "$now" -gt 0 ] || return 0   # no clock -> do not expire on that basis
+  [ "$now" -gt 0 ] || return 1   # no clock -> cannot verify freshness -> fail closed
   [ $((now - t)) -le 900 ] || return 1
   return 0
 }
@@ -153,18 +153,19 @@ if printf '%s' "$CMD" | grep -Eq "${SEG}git[[:space:]]+(-[^[:space:]]+[[:space:]
   if printf '%s' "$CMD" | grep -Eq "git[[:space:]]+push[[:space:]].*(--tags([[:space:]]|\$)|refs/tags/)"; then
     gate release "git tag push"
   fi
-  # push targeting a protected branch (space- or colon-delimited branch token)
-  if printf '%s' "$CMD" | grep -Eq "git[[:space:]]+push[[:space:]].*[[:space:]:](${PROT_RE})([[:space:]]|\$)"; then
+  # push targeting a protected branch (space- or colon-delimited branch token,
+  # or a fully-qualified refs/heads/<protected> refspec)
+  if printf '%s' "$CMD" | grep -Eq "git[[:space:]]+push[[:space:]].*([[:space:]:](${PROT_RE})|refs/heads/(${PROT_RE}))([[:space:]]|\$)"; then
     gate push "git push to protected branch"
   fi
 fi
 
 # 5. catastrophic delete: a WHOLE root or WHOLE home. A home SUBDIR
 # (rm -rf ~/.cache) is reversible T1 and must pass — see .claude/loop/review.md.
-#   /         : root — trailing space, '/', or end          (rm -rf /, //)
+#   /         : root — trailing space, '/', '*', or end     (rm -rf /, //, /*)
 #   ~ /$HOME  : whole home only — optional single trailing '/' then space/end
 #               (rm -rf ~, ~/, $HOME) but NOT ~/<subdir>
-CATA_TGT='(/([[:space:]]|/|$)|(~|[$]HOME|[$][{]HOME[}])/?([[:space:]]|$))'
+CATA_TGT='(/([[:space:]]|/|[*]|$)|(~|[$]HOME|[$][{]HOME[}])/?([[:space:]]|$))'
 if printf '%s' "$CMD" | grep -Eq "${SEG}rm[[:space:]]+(-[a-zA-Z]*[[:space:]]+)*-[a-zA-Z]*[rR][a-zA-Z]*[fF][a-zA-Z]*[[:space:]]+${CATA_TGT}"; then
   gate destructive "catastrophic rm -rf"
 fi

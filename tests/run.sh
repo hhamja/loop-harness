@@ -194,6 +194,9 @@ test_decision_gate() {
   out="$(dgate "$tmp" "rm -rf /")"
   assert_contains "$out" '"deny"' "catastrophic rm: deny"
 
+  out="$(dgate "$tmp" "rm -rf /*")"
+  assert_contains "$out" '"deny"' "root glob rm -rf /*: deny (empty-var expansion)"
+
   out="$(dgate "$tmp" "rm -rf ~")"
   assert_contains "$out" '"deny"' "whole home ~: deny"
 
@@ -217,6 +220,12 @@ test_decision_gate() {
 
   out="$(dgate "$tmp" "git push origin mainline")"
   assert_empty "$out" "push to mainline (not protected): allow"
+
+  out="$(dgate "$tmp" "git push origin HEAD:refs/heads/main")"
+  assert_contains "$out" '"deny"' "fully-qualified refs/heads/main: deny"
+
+  out="$(dgate "$tmp" "git push origin feature/main")"
+  assert_empty "$out" "branch with main as path segment: allow"
 
   # force-refspec form (`+ref`) is a force-push with no -f/--force flag -> T2 for any branch
   out="$(dgate "$tmp" "git push origin +main")"
@@ -245,6 +254,15 @@ test_decision_gate() {
   printf 'action=push\nsession_id=OTHER\nts=%s\n' "$(date +%s)" > "$tmp/.claude/loop/.gate-approved"
   out="$(dgate "$tmp" "git push origin main")"
   assert_contains "$out" '"deny"' "wrong-session marker: deny"
+
+  # unreadable clock (date +%s -> 0) must fail CLOSED: cannot verify marker freshness
+  mkdir -p "$tmp/bin"
+  # shellcheck disable=SC2016  # $1/$@ are literals for the shim script written to disk
+  printf '#!/bin/sh\ncase "$1" in +%%s) echo 0;; *) exec /bin/date "$@";; esac\n' > "$tmp/bin/date"
+  chmod +x "$tmp/bin/date"
+  printf 'action=push\nsession_id=S1\nts=1000000000\n' > "$tmp/.claude/loop/.gate-approved"
+  out="$(printf '{"cwd":"%s","session_id":"S1","tool_input":{"command":"git push origin main"}}' "$tmp" | PATH="$tmp/bin:$PATH" bash "$SCRIPTS/decision_gate.sh")"
+  assert_contains "$out" '"deny"' "unreadable clock + old marker: fail closed (deny)"
 
   rm -rf "$tmp"
 }
