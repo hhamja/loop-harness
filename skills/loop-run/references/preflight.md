@@ -15,3 +15,12 @@ sid="${CLAUDE_CODE_SESSION_ID:-unknown}"; [ -n "$sid" ] || sid=unknown; printf '
 ```
 
 `CLAUDE_CODE_SESSION_ID` is version-dependent; `unknown` is the accepted fallback (the Stop gate then fails open).
+
+## Reconcile the open PR (CI is the loop's, not the human's)
+
+Before new work, reconcile the branch's remote state — a red PR is T0/T1 to fix, so the loop owns it and never leaves it for the human (only the merge is T2):
+
+- If the branch has an **open PR whose latest CI is red**, make fixing it the first goal this run: reopen the failing check as a rubric criterion and close it before starting new work.
+- If the branch is **ahead of base with no open PR** (e.g. a prior PR merged, then new commits landed), it is unreviewed — a new PR must be opened for it (the `auto_pr` Stop hook does this automatically; open one by hand if the hooks are inactive).
+
+Run `bash scripts/ci_watch.sh` (or the project equivalent) to read the current verdict. This is the same watch the green gate uses — see `green-gate.md`.

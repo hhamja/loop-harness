@@ -269,7 +269,8 @@ LLM-judge는 반드시 **사람 라벨로 캘리브레이션**한다. LLM-facing
 | 체커/verifier (§1 L3·3) | `verifier` 서브에이전트 (`agents/verifier.md`; fresh·read-only, `rubric.md`만 기준). 프로세스 감사 = `auditor`, 하네스 리뷰 = `loop-architect` + `design-critic`(적대적) | ✅ |
 | maker≠checker 비대칭 · 티어 (§3) | 권한 = `disallowedTools` + `verifier_guard.sh`(PreToolUse hook) · 정보 = rubric.md만 · 인센티브 = 반증 프레이밍. 티어: explorer=haiku(증명서 有), verifier/auditor/architect/critic=기본(강한 모델) | ✅ |
 | 게이트 순서 (§4) | verifier phase gate → green gate(`auditor` + `/code-review`) → CI `.github/workflows/ci.yml` + `loop-ci` 생성 `loop-ci.yml` | ✅ |
-| 정책 게이트 (§4·7) | `decision_gate.sh` — 테스트/CI 변조·publish·protected-branch push을 테스트 실행 전 T2 하드블록 | ✅ |
+| 정책 게이트: T2 명령 하드블록 (§4·5) | `decision_gate.sh` (PreToolUse, **matcher=Bash만**) — publish·release·merge·protected-branch/force/tag push·catastrophic rm을 실행 전 차단. Bash 명령만 보므로 정직한 에이전트의 망각 백스톱이지 적대적 샌드박스가 아님(Edit/Write·`git -C`·`eval`·마커 위조는 구조상 우회 가능) | ✅ |
+| 정책 게이트: 테스트/CI 변조 차단 (§4·7) | — 미탑재. 훅이 Bash만 감시해 Edit/Write 경로의 테스트·CI 파일 수정은 diff-path 게이트 없이 통과(§7 "테스트·CI 변경=비가역 T2" 미집행) | ✕ |
 | 홀드아웃 스위트 (§4) | — (architect 성숙도 L4 상한 사유) | ✕ |
 | Eval 골든셋 게이트 (§4) | — | ✕ |
 | 결정 게이트 T0/T1/T2 (§5) | `decision_gate.sh`(T2 차단) + `auto_push.sh`(T0 work-branch push, Stop hook) + `.gate-approved` 1회용 마커(15분 TTL) | ✅ |
@@ -283,7 +284,7 @@ LLM-judge는 반드시 **사람 라벨로 캘리브레이션**한다. LLM-facing
 
 운영 절차(사이클 형태·게이트 배선·메모리 프로토콜)는 여기서 반복하지 않는다 — Claude Code 특화 운영 카운터파트는 `skills/loop-engineering/SKILL.md`와 그 `references/`다.
 
-✕/⚠ 행(홀드아웃·eval 게이트·부수효과 원장·독립 kill-switch·관측 카운터·가역성 엔지니어링)이 곧 `loop-architect`가 이 레포에 매기는 **성숙도 상한(L4/L5)의 사유**다. 진단·리뷰 기능이 존재하는 이유가 바로 이 갭을 기계적으로 드러내기 위해서다 — 문서가 스스로를 채점한다.
+✕/⚠ 행(홀드아웃·eval 게이트·테스트/CI 변조 차단·부수효과 원장·독립 kill-switch·관측 카운터·가역성 엔지니어링)이 곧 `loop-architect`가 이 레포에 매기는 **성숙도 상한(L4/L5)의 사유**다. 진단·리뷰 기능이 존재하는 이유가 바로 이 갭을 기계적으로 드러내기 위해서다 — 문서가 스스로를 채점한다.
 
 ---
 

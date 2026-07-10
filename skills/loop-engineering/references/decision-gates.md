@@ -44,6 +44,8 @@ Three Stop-hook scripts are the **active complement** to the block — the T0 ru
 
 `scripts/auto_pr.sh` runs last: once the branch is pushed it opens a pull request (`gh pr create --fill` — title/body from the commit log, base = the repo's default branch) so the human returns to a reviewable PR, not a bare branch. Opening a PR is T0 (reversible: close it; the *merge* is the T2 gate). It never opens a PR *from* a protected branch, requires an upstream (the branch was pushed) plus an authenticated `gh`, and — since a branch can carry a merged/closed PR and new commits — only creates when there is no *open* PR for the branch. `pr_draft: true` opens it as a draft. Opt out with `auto_pr: false`; outcome logs to `.claude/loop/.last-pr` and never blocks the turn.
 
+**After the PR: keeping CI green is the loop's, not the human's.** CI runs async on GitHub, so no Stop hook can wait on it — watching + fixing a red run is multi-step loop work, owned by `loop-run`, not a fire-and-forget hook. A red run is reversible/local to fix (T0/T1), so the loop drives it to green autonomously and never leaves it or asks: the green gate runs `scripts/ci_watch.sh` (blocks on the run, prints the failing log on red), reopens the failing check as a rubric criterion, and loops — bounded by `max_iterations`. Only when it is *stuck* past the cap does it escalate (stuck = human judgment, not risk). Never disable/skip the check to force green — that is T2-class test/CI tampering. The **merge stays the one human gate.**
+
 ## Passing a gate (the one-shot marker)
 
 When a T2 action is genuinely needed and a human has **explicitly approved** it:
