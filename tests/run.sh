@@ -69,6 +69,7 @@ test_verifier_guard() {
   out="$(guard '{"agent_type":"verifier","tool_input":{"command":"grep -E '\''x => y'\'' f"}}')"
   assert_empty "$out" "verifier grep fat-arrow in quotes: allow"
 
+  # shellcheck disable=SC2016  # awk's $1 is data inside single quotes, literal by design
   out="$(guard '{"agent_type":"verifier","tool_input":{"command":"awk '\''{if ($1 > 5) print}'\'' f"}}')"
   assert_empty "$out" "verifier awk > compare in quotes: allow"
 
@@ -397,6 +398,22 @@ test_auto_push() {
   tmp="$(mktemp -d)"; mk_repo "$tmp" "main"
   out="$(autopush "$(printf '{"cwd":"%s/work","session_id":"S1"}' "$tmp")")"
   assert_empty "$out" "protected branch: no push"
+  rm -rf "$tmp"
+
+  # pre-push CI gate: red scripts/ci_local.sh -> stand down (no push)
+  tmp="$(mktemp -d)"; mk_repo "$tmp" "feature/x"
+  mkdir -p "$tmp/work/scripts"; printf '#!/bin/sh\nexit 1\n' > "$tmp/work/scripts/ci_local.sh"
+  chmod +x "$tmp/work/scripts/ci_local.sh"
+  out="$(autopush "$(printf '{"cwd":"%s/work","session_id":"S1"}' "$tmp")")"
+  assert_empty "$out" "ci_local red: no push"
+  rm -rf "$tmp"
+
+  # pre-push CI gate: green scripts/ci_local.sh -> push proceeds
+  tmp="$(mktemp -d)"; mk_repo "$tmp" "feature/x"
+  mkdir -p "$tmp/work/scripts"; printf '#!/bin/sh\nexit 0\n' > "$tmp/work/scripts/ci_local.sh"
+  chmod +x "$tmp/work/scripts/ci_local.sh"
+  out="$(autopush "$(printf '{"cwd":"%s/work","session_id":"S1"}' "$tmp")")"
+  assert_contains "$out" "WOULD: git push" "ci_local green: push proceeds"
   rm -rf "$tmp"
 }
 

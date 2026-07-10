@@ -14,24 +14,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: shellcheck (hook + test scripts)
-        run: shellcheck scripts/*.sh tests/*.sh
-
-      - name: bash syntax check
-        run: |
-          for f in scripts/*.sh tests/*.sh; do
-            bash -n "$f"
-          done
-
-      - name: JSON valid + manifest required fields
-        run: |
-          for j in .claude-plugin/plugin.json .claude-plugin/marketplace.json hooks/hooks.json; do
-            jq empty "$j"
-          done
-          jq -e '.name and .version and .description and .author.name' \
-            .claude-plugin/plugin.json > /dev/null
-          jq -e '.name and .owner.name and (.plugins | length > 0)' \
-            .claude-plugin/marketplace.json > /dev/null
-
-      - name: hook contract tests
-        run: bash tests/run.sh
+      # Single source: the exact same checks are runnable locally with
+      # `bash scripts/ci_local.sh`, so local and CI can never drift.
+      # shellcheck and jq are preinstalled on ubuntu-latest.
+      - name: local CI (shellcheck + syntax + manifest + budget + tests)
+        run: bash scripts/ci_local.sh
