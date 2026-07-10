@@ -69,6 +69,14 @@ Loops, verifiers and subagents consume tokens — always weigh cost against the 
 - With `implementer: codex`, Codex output is kept out of Claude's context, and Codex-side usage is billed by OpenAI — it is **not** included in the `.last-usage` estimate.
 - Start with `--verify-only` or `--once` when unsure a full loop is worth it.
 
+## fleet — see all your parallel sessions
+
+`scripts/fleet.sh` prints every **live** Claude Code session on this machine (across all projects) as a table, waiting-for-input first, so a session silently blocked on you never gets lost. It reads `~/.claude/sessions/*.json` (Claude Code already writes each session's name/status/cwd there live) and drops dead PIDs — read-only, no hooks, independent of `.claude/loop/`. `--watch [secs]` auto-refreshes. Run it in a spare terminal; symlink onto PATH for a one-word command:
+
+```
+ln -s "$PWD/scripts/fleet.sh" ~/.local/bin/fleet   # then: fleet   (or: fleet --watch)
+```
+
 ## Boundary principles
 
 1. **"Done" is a claim, not a proof** — the final verification belongs to a human.

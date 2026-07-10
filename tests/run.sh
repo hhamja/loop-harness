@@ -689,6 +689,32 @@ test_branch_guard() {
   rm -rf "$tmp"
 }
 
+# ── fleet.sh: live/stale (PID) reconciliation over a fixture sessions dir ──
+# FLEET_SESSIONS_DIR injects the sessions dir; live PIDs = this shell ($$) and its
+# parent ($PPID, alive for the test's duration); dead PID = 999999 (above macOS
+# PID_MAX, so kill -0 fails).
+test_fleet() {
+  printf '\nfleet.sh\n'
+  local tmp out now
+  tmp="$(mktemp -d)"
+  now=$(( $(date +%s) * 1000 ))
+  printf '{"pid":%s,"name":"alive-wait","status":"waiting","kind":"interactive","cwd":"%s","updatedAt":%s}\n' \
+    "$$" "$tmp" "$now" > "$tmp/$$.json"
+  # empty status + null updatedAt: fields must not collapse/shift and must not crash arithmetic
+  printf '{"pid":%s,"name":"alive-empty","status":"","kind":"interactive","cwd":"%s","updatedAt":null}\n' \
+    "$PPID" "$tmp" > "$tmp/$PPID.json"
+  printf '{"pid":999999,"name":"dead-one","status":"busy","kind":"interactive","cwd":"%s","updatedAt":%s}\n' \
+    "$tmp" "$now" > "$tmp/999999.json"
+
+  out="$(FLEET_SESSIONS_DIR="$tmp" bash "$SCRIPTS/fleet.sh" 2>&1)"
+  case "$out" in *error*) bad "empty status: no crash" "got: $out" ;; *) ok "empty status: no crash" ;; esac
+  assert_contains "$out" "alive-wait" "live PID: shown"
+  assert_contains "$out" "alive-empty" "live PID w/ empty status: shown"
+  case "$out" in *dead-one*) bad "dead PID: hidden" "dead-one present" ;; *) ok "dead PID: hidden" ;; esac
+  assert_contains "$out" "1 stale" "dead PID counted as stale"
+  rm -rf "$tmp"
+}
+
 test_verifier_guard
 test_decision_gate
 test_stop_gate
@@ -701,6 +727,7 @@ test_auto_commit
 test_auto_pr
 test_ci_watch
 test_branch_guard
+test_fleet
 
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.11.0 — 2026-07-10
+
+- **`scripts/fleet.sh`: an at-a-glance view of every live Claude Code session on the machine.** Running many parallel sessions across projects, you lose track of which are working, which are done, and — the one that actually costs you — which are *silently waiting for input*. fleet reads `~/.claude/sessions/<PID>.json` (Claude Code already writes each session's `name`/`status`/`cwd`/`updatedAt` there live and rewrites it on every transition), reconciles against `kill -0` to drop dead PIDs, and prints a table sorted **waiting → busy → idle** with whole-row color emphasis on waiting. No hooks, no transcript parsing, no new dependency (just `jq`); read-only and independent of `.claude/loop/`. `--watch [secs]` auto-refreshes in a spare terminal.
+  - Deliberately **not** a loopy skill: it is a machine-wide, cross-project tool, orthogonal to a single project's maker/checker loop, and a folder-scoped slash command would both miss the "see everything" goal and spend the description-word budget. Symlink `scripts/fleet.sh` onto PATH for a one-word `fleet`.
+  - Covered by a new `tests/run.sh` case that injects a fixture sessions dir via `FLEET_SESSIONS_DIR` (live PID = `$$`/`$PPID`, dead PID = 999999) and locks the empty-`status` regression: a session field left blank must not collapse and shift the columns (the reason the first draft crashed on a real VS Code bridge session). 121 tests pass, `ci_local.sh` green.
+
 ## 0.10.0 — 2026-07-10
 
 - **Autonomous CI remediation: the loop keeps its own PR green; only the merge is human.** By the reversibility×impact doctrine, fixing a red CI on a work branch is T0/T1 (reversible, local) — so leaving a red PR for the human, or asking whether to fix it, is over-confirmation. The gap: the Stop hooks (commit→push→PR) open a PR but nothing then drives a red run back to green, so a remote-only failure could sit red.
