@@ -15,9 +15,11 @@
 #                             .session-lock.
 #   others <cur_sid>      exit 0 = a DIFFERENT live session is present in this
 #                         tree (fresh .session-lock by another sid, or a fresh
-#                         foreign .touched-* manifest). auto_commit narrows its
-#                         staging to this session's manifest on 0, sweeps with
-#                         add -A on 1. <cur_sid> is reduced to its sid_safe form.
+#                         foreign .touched-* manifest — which doubles as a
+#                         presence marker: Bash-only sessions bump it too).
+#                         auto_commit narrows its staging to this session's
+#                         manifest on 0, sweeps with add -A on 1. <cur_sid> is
+#                         reduced to its sid_safe form.
 #   acquire <sid> <pid>   take/refresh .session-lock. exit 0 = owned by <sid>,
 #                         exit 1 = a different fresh session owns it (refuse).
 #   release <sid>         drop .session-lock if owned by <sid> (or stale/absent).

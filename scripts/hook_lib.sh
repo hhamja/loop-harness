@@ -77,9 +77,16 @@ except Exception:
 }
 
 # sid_safe <sid> — session id reduced to filename-safe chars (it names the
-# per-session .touched-<sid> manifest); empty in -> "unknown" out.
+# per-session .touched-<sid> manifest); empty in -> "unknown" out. When the
+# filter dropped characters, two DISTINCT sids could collapse to one name
+# ("a/b" and "ab") — that collision would merge two sessions' manifests and
+# defeat the peer detection, so a checksum of the raw sid disambiguates.
 sid_safe() {
-  local s; s="$(printf '%s' "${1:-}" | tr -cd 'A-Za-z0-9._-')"
+  local raw="${1:-}" s
+  s="$(printf '%s' "$raw" | tr -cd 'A-Za-z0-9._-')"
+  if [ -n "$raw" ] && [ "$s" != "$raw" ]; then
+    s="${s}-$(printf '%s' "$raw" | cksum | cut -d' ' -f1)"
+  fi
   printf '%s' "${s:-unknown}"
 }
 

@@ -57,6 +57,13 @@ hook_debug auto_commit
 # --- guard 2: already re-prompted once (avoid committing mid-block) ---
 stop_hook_active && exit 0
 
+# GC manifests idle past the lock TTL (finished or crashed sessions); floored at
+# 1 minute — find counts minutes, the TTL counts seconds, and a sub-minute TTL
+# must never let GC delete a manifest loop_lock still calls fresh.
+GC_MIN="$(( ${LOOP_LOCK_TTL:-3600} / 60 ))"; [ "$GC_MIN" -ge 1 ] || GC_MIN=1
+find "$LOOP_DIR" -maxdepth 1 -name '.touched-*' -mmin "+$GC_MIN" \
+  -exec rm -f {} + 2>/dev/null || true
+
 # --- guard 3: disabled per project ---
 [ "$(cfg_flag auto_commit true)" = "true" ] || exit 0
 WORKER="$(config_field worker)"
@@ -69,17 +76,15 @@ BRANCH="$(git symbolic-ref --short -q HEAD 2>/dev/null || true)"
 # --- session scope: my manifest + is a different live session sharing this tree? ---
 SID="$(sid_safe "$(json_str session_id)")"
 MANIFEST="$LOOP_DIR/.touched-$SID"
-# GC manifests idle past the lock TTL (finished or crashed sessions)
-find "$LOOP_DIR" -maxdepth 1 -name '.touched-*' -mmin "+$(( ${LOOP_LOCK_TTL:-3600} / 60 ))" \
-  -exec rm -f {} + 2>/dev/null || true
 if bash "$SCRIPT_DIR/loop_lock.sh" others "$SID"; then CONTENDED=1; else CONTENDED=0; fi
 
 # --- guard 5: something to commit (worker mode: only results/ counts under .claude/loop/) ---
-STATUS="$(git status --porcelain 2>/dev/null)"
+# quotePath off: porcelain emits non-ASCII paths raw so they match manifest entries
+STATUS="$(git -c core.quotePath=off status --porcelain 2>/dev/null)"
 if [ -n "$WORKER" ]; then
   # -uall expands collapsed untracked dirs (`?? .claude/`) into file lines, then
   # drop .claude/loop/ lines unless they are results/ (sed: on non-results lines, delete loop lines)
-  STATUS="$(git status --porcelain -uall 2>/dev/null | sed '\#\.claude/loop/results#!{\#\.claude/loop/#d;}')"
+  STATUS="$(git -c core.quotePath=off status --porcelain -uall 2>/dev/null | sed '\#\.claude/loop/results#!{\#\.claude/loop/#d;}')"
 fi
 [ -n "$STATUS" ] || { rm -f "$MANIFEST" 2>/dev/null; exit 0; }
 
@@ -120,11 +125,12 @@ if [ -n "$WORKER" ]; then
   git add -A -- .claude/loop/results >/dev/null 2>&1   # re-include results/<task>.md
 elif [ "$CONTENDED" -eq 1 ]; then
   # a peer session is live in this tree: stage exactly the scoped paths, never -A
+  # (-C "$TOP": porcelain paths are toplevel-relative; the hook cwd may be a subdir)
   while IFS= read -r line; do
     [ -n "$line" ] || continue
     p="${line:3}"; p="${p##* -> }"
     case "$p" in \"*\") p="${p#\"}"; p="${p%\"}" ;; esac
-    git add -A -- "$p" >/dev/null 2>&1
+    git -C "$TOP" add -A -- "$p" >/dev/null 2>&1
   done <<< "$STATUS"
 else
   git add -A >/dev/null 2>&1

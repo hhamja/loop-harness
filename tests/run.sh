@@ -645,6 +645,16 @@ test_auto_commit() {
   if [ -f "$tmp/work/.claude/loop/.touched-S1" ]; then bad "contended real run: manifest cleared" "still present"; else ok "contended real run: manifest cleared"; fi
   rm -rf "$tmp"
 
+  # presence-only peer (Bash-only session: fresh EMPTY foreign manifest) -> the
+  # sweep narrows: peer's Bash-made file is NOT committed, only my manifest path
+  tmp="$(mktemp -d)"; tmp="$(cd "$tmp" && pwd -P)"; mk_repo "$tmp" "feature/x"
+  echo mine > "$tmp/work/f2"; echo bash-made > "$tmp/work/f3"
+  : > "$tmp/work/.claude/loop/.touched-PEER"
+  printf '%s/work/f2\n' "$tmp" > "$tmp/work/.claude/loop/.touched-S1"
+  out="$(autocommit "$(printf '{"cwd":"%s/work","session_id":"S1"}' "$tmp")")"
+  assert_contains "$out" "WOULD: git commit (1 files)" "presence-only peer: peer's Bash output not swept"
+  rm -rf "$tmp"
+
   # stale foreign manifest -> treated as alone: full add -A sweep (2 files)
   tmp="$(mktemp -d)"; mk_repo "$tmp" "feature/x"
   echo mine > "$tmp/work/f2"; echo leftover > "$tmp/work/f3"
@@ -947,13 +957,19 @@ test_touch_track() {
   assert_contains "$out" "$tmp/a.txt" "records first file_path"
   assert_contains "$out" "$tmp/b.txt" "appends second file_path"
 
-  # tool_input without file_path -> writes nothing
+  # tool_input without file_path (Bash) -> presence only: empty manifest, no paths
   tt "$(printf '{"cwd":"%s","session_id":"S2","tool_input":{"command":"ls"}}' "$tmp")"
-  if [ -e "$tmp/.claude/loop/.touched-S2" ]; then bad "no file_path: no manifest" "file exists"; else ok "no file_path: no manifest"; fi
+  if [ -f "$tmp/.claude/loop/.touched-S2" ] && [ ! -s "$tmp/.claude/loop/.touched-S2" ]; then
+    ok "no file_path: presence marker only (empty manifest)"
+  else
+    bad "no file_path: presence marker only (empty manifest)"
+  fi
 
-  # hostile session id is reduced to a filename-safe manifest name
+  # hostile session id -> filename-safe + checksum-disambiguated manifest name
+  # (plain "..evil" would collide with a session literally named "..evil")
+  local ck; ck="$(printf '%s' "../evil" | cksum | cut -d' ' -f1)"
   tt "$(printf '{"cwd":"%s","session_id":"../evil","tool_input":{"file_path":"%s/c.txt"}}' "$tmp" "$tmp")"
-  if [ -f "$tmp/.claude/loop/.touched-..evil" ]; then ok "sid sanitized for filename"; else bad "sid sanitized for filename" "expected .touched-..evil"; fi
+  if [ -f "$tmp/.claude/loop/.touched-..evil-$ck" ]; then ok "sid sanitized + checksum for filename"; else bad "sid sanitized + checksum for filename" "expected .touched-..evil-$ck"; fi
   rm -rf "$tmp"
 }
 
