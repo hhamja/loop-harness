@@ -54,12 +54,14 @@ lock_is_stale() {
 
 write_lock() { printf 'session_id=%s\npid=%s\nepoch=%s\n' "$1" "$2" "$(now)" > "$LOCK"; }
 
-# file_fresh <path> — 0 (true) when the file's mtime is within TTL. BSD stat
-# first (this repo's primary platform), GNU stat fallback (CI). Unreadable
-# mtime -> not fresh (fails toward "alone": the wider add -A backstop).
+# file_fresh <path> — 0 (true) when the file's mtime is within TTL. GNU stat
+# (-c) FIRST: it hard-fails on BSD, while BSD's -f is *silently wrong* on GNU
+# (-f = file-system mode there; %m prints the mount point, not an epoch) — so
+# the GNU form must be the one probed. Unreadable mtime -> not fresh (fails
+# toward "alone": the wider add -A backstop).
 file_fresh() {
   local e
-  e="$(stat -f %m "$1" 2>/dev/null || stat -c %Y "$1" 2>/dev/null || echo)"
+  e="$(stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null || echo)"
   case "$e" in ''|*[!0-9]*) return 1 ;; esac
   [ $(( $(now) - e )) -le "$TTL" ]
 }
