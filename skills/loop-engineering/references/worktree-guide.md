@@ -1,12 +1,12 @@
-# Worktree Guide — parallel loop execution (reference only)
+# Worktree Guide — parallel loop execution
 
-The MVP ships no command that uses worktrees. This documents the procedure and merge policy for when parallelism is worth its token cost: several INDEPENDENT tasks, each with its own rubric subset.
+Implemented by `/loopy:loop-worktree` (spawn a worker / integrate finished workers); this file is the doctrine it follows. Parallelism must be worth its token cost: several INDEPENDENT tasks, each with its own rubric subset.
 
 ## Procedure
 
 1. Split the rubric into independent subsets. Tasks touching the same files are NOT independent — don't parallelize them.
 2. Per task: `git worktree add ../<repo>-<task> -b loop/<task>`
-3. Run one agent per worktree, scoped to its rubric subset.
+3. Run one agent per worktree, scoped to its rubric subset. Each worktree is a separate checkout with its own index/HEAD, so the per-worktree loop lock (`loop_lock.sh`, acquired at preflight) is satisfied independently — this is exactly why parallel loops need separate worktrees rather than one shared tree (a shared tree serializes: the second `loop-run` is refused by the lock).
 4. After merging (below): `git worktree remove ../<repo>-<task>` and delete the branch.
 
 ## Merge policy (mandatory)

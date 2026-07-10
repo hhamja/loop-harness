@@ -226,6 +226,7 @@ LLM-judge는 반드시 **사람 라벨로 캘리브레이션**한다. LLM-facing
 | **버전 드리프트** | 모델 업그레이드 후 조용한 행동 변화 | 모델 버전 핀 + 업그레이드를 eval 게이트 통과 대상으로 취급(코드 변경과 동일) |
 | **승인 피로** | 사람이 전부 승인 누름 | 요청 건수를 SLO로 관리. 초과 시 **자율성 설계 결함**으로 간주 |
 | **Flakiness** | 재현 안 되는 실패 | 멱등 재시도, flaky 격리, seed 고정 |
+| **공유 워킹트리 엉킴** | 한 워킹트리를 두 세션이 공유 → auto-commit(`git add -A`)이 상대 세션의 미커밋 변경까지 한 커밋에 스테이징, 히스토리 오염 | 자동 부수효과는 **하네스가 소유한 작업 단위**에만: 동일-세션 `.run-marker` 게이트(auto_* 훅) + 워킹트리당 단일-루프 락(`loop_lock.sh`, 두 번째 loop-run 거부) + 병렬 필요 시 worktree 격리(§2) |
 
 ---
 
@@ -265,7 +266,7 @@ LLM-judge는 반드시 **사람 라벨로 캘리브레이션**한다. LLM-facing
 | 오케스트레이터 · durable state (§1·2) | 메인 에이전트(세션) + `.claude/loop/` (`goal`·`rubric`·`state`·`memory`·`review`·`loop.config`.md) | ✅ |
 | 워커/maker · 컨텍스트 격리 (§1 L2·2) | `implementer:` = Codex CLI `codex exec --full-auto`(사이클마다 fresh, resume 금지) / Claude 폴백. stdout→`.codex-log`, 메인은 `.codex-last`만 읽음 | ✅ |
 | 정찰 팬아웃 (§2) | `explorer` 서브에이전트 (haiku, read-only) | ✅ |
-| 병렬 쓰기 워커 (§2) | `git worktree` (`references/worktree-guide.md`) — 문서만, 이를 쓰는 커맨드 미탑재 | ⚠ |
+| 병렬 쓰기 워커 (§2) | `git worktree` (`references/worktree-guide.md`) — 문서만, 이를 쓰는 커맨드 미탑재. 단 워킹트리당 단일-루프 락(`loop_lock.sh`)이 동시 루프 상호배제는 집행(두 번째 loop-run 거부) | ⚠ |
 | 체커/verifier (§1 L3·3) | `verifier` 서브에이전트 (`agents/verifier.md`; fresh·read-only, `rubric.md`만 기준). 프로세스 감사 = `auditor`, 하네스 리뷰 = `loop-architect` + `design-critic`(적대적) | ✅ |
 | maker≠checker 비대칭 · 티어 (§3) | 권한 = `disallowedTools` + `verifier_guard.sh`(PreToolUse hook) · 정보 = rubric.md만 · 인센티브 = 반증 프레이밍. 티어: explorer=haiku(증명서 有), verifier/auditor/architect/critic=기본(강한 모델) | ✅ |
 | 게이트 순서 (§4) | verifier phase gate → green gate(`auditor` + `/code-review`) → CI `.github/workflows/ci.yml` + `loop-ci` 생성 `loop-ci.yml` | ✅ |
@@ -273,7 +274,7 @@ LLM-judge는 반드시 **사람 라벨로 캘리브레이션**한다. LLM-facing
 | 정책 게이트: 테스트/CI 변조 차단 (§4·7) | — 미탑재. 훅이 Bash만 감시해 Edit/Write 경로의 테스트·CI 파일 수정은 diff-path 게이트 없이 통과(§7 "테스트·CI 변경=비가역 T2" 미집행) | ✕ |
 | 홀드아웃 스위트 (§4) | — (architect 성숙도 L4 상한 사유) | ✕ |
 | Eval 골든셋 게이트 (§4) | — | ✕ |
-| 결정 게이트 T0/T1/T2 (§5) | `decision_gate.sh`(T2 차단) + `auto_push.sh`(T0 work-branch push, Stop hook) + `.gate-approved` 1회용 마커(15분 TTL) | ✅ |
+| 결정 게이트 T0/T1/T2 (§5) | `decision_gate.sh`(T2 차단) + `auto_commit`/`auto_push`/`auto_pr`(T0, Stop hook; **동일-세션 `.run-marker` + 워킹트리 락에 게이트** `loop_lock.sh` — 비-루프 턴·타세션에선 미발동) + `.gate-approved` 1회용 마커(15분 TTL) | ✅ |
 | 가역성 엔지니어링 (§5: canary·flag·tombstone) | — (architect L5 상한 사유) | ✕ |
 | 서킷브레이커 (§6) | `max_iterations` 캡 + 3연속 실패 → `replan`(`replan_max`) → escalate | ✅ |
 | kill-switch (§6) | `stop_gate.sh`(state 미갱신 시 턴 차단); repo 밖 독립 kill-switch 없음 | ⚠ |

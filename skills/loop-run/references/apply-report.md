@@ -2,6 +2,8 @@
 
 After each cycle's phase gate, the main agent does ALL state updates (the verifier only reports; it never writes):
 
+**Worker runs** (`worker: <task>` in loop.config.md, spawned by `/loopy:loop-worktree`): additionally mirror the outcome into `.claude/loop/results/<task>.md` (subset criteria pass/fail, files touched, unresolved) — that file is what the orchestrator integrates; the local state.md below stays uncommitted (auto_commit's worker mode excludes it).
+
 - `rubric.md`: set `[x]` on criteria the report passed, `[ ]` otherwise.
 - `state.md`: REWRITE as a summary — `loop_active`, `human_gate` (`none` | `ready_for_merge` | `pending_t2` | `stalled` — a deterministic marker the driver/notifier reads), iteration count, attempted / passed / unresolved (with consecutive-failure and `replan` count per criterion), and the token figure from `.claude/loop/.last-usage` if present, explicitly labeled "estimate". Max 100 lines. Never append (exception: the single 'loop interrupted' line the stop gate may demand).
   - Under `## Approaches tried (rejected)`, for each criterion the verifier still fails, add `- Rn: <approach just tried> → rejected: <why it failed>` — this is the episodic memory a fresh cycle relies on to not repeat a dead end (it is run-scoped state, NOT a distilled rule). Drop a criterion's entries once it passes; keep the last ~3-5 per criterion.
