@@ -1,45 +1,9 @@
-# ── macOS ──────────────────────────────────────────────
+# ── macOS / 에디터 ─────────────────────────────────────
 .DS_Store
-.DS_Store?
 ._*
-.AppleDouble
-.LSOverride
-.Spotlight-V100
-.Trashes
-Icon?
-
-# ── Windows ────────────────────────────────────────────
-Thumbs.db
-Thumbs.db:encryptable
-ehthumbs.db
-Desktop.ini
-$RECYCLE.BIN/
-
-# ── Linux ──────────────────────────────────────────────
-*~
-.fuse_hidden*
-.directory
-.Trash-*
-
-# ── 에디터 / IDE ───────────────────────────────────────
 .vscode/
 .idea/
 *.swp
-*.swo
-*.sublime-workspace
-*.sublime-project
-.netrwhist
-
-# ── 로그 / 임시 / 백업 ─────────────────────────────────
-*.log
-*.tmp
-*.temp
-*.bak
-*.orig
-*.rej
-.cache/
-tmp/
-temp/
 
 # ── 비밀정보 / 환경변수 ────────────────────────────────
 .env
@@ -47,7 +11,6 @@ temp/
 !.env.example
 *.pem
 *.key
-secrets/
 
 # ── Claude Code / loopy 로컬 런타임 ─────────────────────
 # 소스(skills·agents 등)는 전부 레포 루트에 있고, .claude/ 아래엔 세션마다
@@ -55,9 +18,7 @@ secrets/
 # 훗날 loop 상태를 커밋하려면 `git add -f`.
 .claude/
 
-# ── 언어 도구 산출물 (도구 도입 시 대비) ───────────────
+# ── 언어 도구 산출물 ───────────────────────────────────
 node_modules/
 __pycache__/
-*.py[cod]
 .venv/
-venv/

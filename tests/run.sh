@@ -415,7 +415,7 @@ test_check_memory() {
   assert_empty "$out" "clean state+memory: no block"
   rm -rf "$tmp"
 
-  # missing loop_active field -> block (drive_next contract)
+  # missing loop_active field -> block (loop resume contract)
   tmp="$(mktemp -d)"; mkdir -p "$tmp/.claude/loop"
   printf 'human_gate: none\niteration: 0\n' > "$tmp/.claude/loop/state.md"
   out="$(cmem "$(printf '{"cwd":"%s"}' "$tmp")")"; rc=$?
@@ -469,57 +469,6 @@ test_gen_ci() {
 
   gen_ci --pm cargo >/dev/null 2>&1
   assert_exit 2 "$?" "unsupported --pm: exit 2"
-}
-
-# ── drive_next.sh: state.md -> one verdict token, exit 0 ──
-# Deterministic driver brain: human_gate wins over loop_active; unknown gate falls through.
-dnext() { bash "$SCRIPTS/drive_next.sh" "$1"; }
-
-test_drive_next() {
-  printf '\ndrive_next.sh\n'
-  local tmp out rc
-
-  tmp="$(mktemp -d)"
-  out="$(dnext "$tmp")"; rc=$?
-  assert_exit 0 "$rc" "no state: exit 0"
-  assert_contains "$out" "idle" "no state: idle"
-  rm -rf "$tmp"
-
-  tmp="$(mktemp -d)"; mkdir -p "$tmp/.claude/loop"
-  printf 'loop_active: true\nhuman_gate: none\niteration: 3\n' > "$tmp/.claude/loop/state.md"
-  out="$(dnext "$tmp")"
-  assert_contains "$out" "run" "active + no gate: run"
-  rm -rf "$tmp"
-
-  tmp="$(mktemp -d)"; mkdir -p "$tmp/.claude/loop"
-  printf 'loop_active: true\nhuman_gate: ready_for_merge\n' > "$tmp/.claude/loop/state.md"
-  out="$(dnext "$tmp")"
-  assert_contains "$out" "notify:ready_for_merge" "ready_for_merge: notify (gate beats loop_active)"
-  rm -rf "$tmp"
-
-  tmp="$(mktemp -d)"; mkdir -p "$tmp/.claude/loop"
-  printf 'loop_active: false\nhuman_gate: pending_t2\n' > "$tmp/.claude/loop/state.md"
-  out="$(dnext "$tmp")"
-  assert_contains "$out" "notify:pending_t2" "pending_t2: notify"
-  rm -rf "$tmp"
-
-  tmp="$(mktemp -d)"; mkdir -p "$tmp/.claude/loop"
-  printf 'human_gate: stalled\nloop_active: false\n' > "$tmp/.claude/loop/state.md"
-  out="$(dnext "$tmp")"
-  assert_contains "$out" "notify:stalled" "stalled: notify"
-  rm -rf "$tmp"
-
-  tmp="$(mktemp -d)"; mkdir -p "$tmp/.claude/loop"
-  printf 'loop_active: false\nhuman_gate: none\n' > "$tmp/.claude/loop/state.md"
-  out="$(dnext "$tmp")"
-  assert_contains "$out" "idle" "inactive + no gate: idle"
-  rm -rf "$tmp"
-
-  tmp="$(mktemp -d)"; mkdir -p "$tmp/.claude/loop"
-  printf 'loop_active: true\nhuman_gate: bogus\n' > "$tmp/.claude/loop/state.md"
-  out="$(dnext "$tmp")"
-  assert_contains "$out" "run" "unknown gate: fall through, not a false gate"
-  rm -rf "$tmp"
 }
 
 # ── auto_push.sh: Stop hook that pushes the current work branch at turn end ──
@@ -1109,7 +1058,6 @@ test_loop_lock
 test_touch_track
 test_budget
 test_gen_ci
-test_drive_next
 test_auto_push
 test_auto_commit
 test_auto_pr

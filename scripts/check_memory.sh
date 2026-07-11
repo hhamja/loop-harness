@@ -8,8 +8,9 @@
 # work, and until now the memory subsystem graded itself.
 #
 # Fail-open on every doubt. BLOCKS only on contract/protocol violations:
-#   - state.md missing a deterministic field drive_next.sh parses
-#     (loop_active / human_gate) — absence silently degrades the driver to idle.
+#   - state.md missing a deterministic contract field (loop_active / human_gate)
+#     — skills and the SessionStart digest parse these to resume or gate a loop;
+#     absence silently degrades resume to "no loop here".
 #   - a memory.md Raw-log entry (### ...) or Distilled rule (- ...) missing its
 #     mandatory [plugin]/[project] tag (memory-protocol.md: untagged = violation).
 # Soft size caps (state.md >100 lines, Raw log >200 lines) are WARN-only, printed
@@ -38,10 +39,10 @@ MEMORY="$LOOP_DIR/memory.md"
 violations=""
 add_v() { if [ -z "$violations" ]; then violations="$1"; else violations="$violations; $1"; fi; }
 
-# --- state.md: required deterministic fields (drive_next.sh contract) ---
+# --- state.md: required deterministic fields (loop resume contract) ---
 if [ -f "$STATE" ]; then
-  grep -Eq '^loop_active:' "$STATE" || add_v "state.md missing 'loop_active:' field (drive_next.sh reads it)"
-  grep -Eq '^human_gate:' "$STATE" || add_v "state.md missing 'human_gate:' field (drive_next.sh reads it)"
+  grep -Eq '^loop_active:' "$STATE" || add_v "state.md missing 'loop_active:' field (loop resume contract)"
+  grep -Eq '^human_gate:' "$STATE" || add_v "state.md missing 'human_gate:' field (loop resume contract)"
   lines="$(wc -l < "$STATE" | tr -d '[:space:]')"
   case "$lines" in ''|*[!0-9]*) lines=0 ;; esac
   [ "$lines" -gt 100 ] && printf 'check_memory: warn: state.md is %s lines (cap 100 — rewrite as a summary)\n' "$lines" >&2

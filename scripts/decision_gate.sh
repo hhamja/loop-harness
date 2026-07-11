@@ -64,9 +64,6 @@ deny() {
 # gate <class> <tag>: block unless the human approved this class.
 gate() { gate_approved "$1" || deny "$2" "$1"; }
 
-# segment start = beginning, or after ; & | $( `
-SEG='(^|[;&|]|\$\(|`)[[:space:]]*(sudo[[:space:]]+)?'
-
 # 1. package publish
 if printf '%s' "$CMD" | grep -Eq "${SEG}(npm|pnpm|yarn|bun)[[:space:]]+publish([[:space:]]|\$)"; then
   gate publish "package publish"

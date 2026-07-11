@@ -7,7 +7,7 @@
     {
       "name": "loopy",
       "source": "./",
-      "description": "Universal loop-engineering harness: machine-verifiable stop conditions, cross-model maker/checker (Codex maker, Claude checker), disk-based loop memory, reversibility×impact decision gates that keep human approval to irreversible actions while auto-pushing reversible work-branch commits, autonomous replan on stalls, and a green gate (process audit + code review) before human merge."
+      "description": "Loop-engineering harness: machine-verified maker/checker cycles (Codex maker, Claude checker) with reversibility-tiered decision gates — humans approve only irreversible actions."
     }
   ]
 }

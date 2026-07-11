@@ -41,9 +41,6 @@ deny() {
   exit 0
 }
 
-# segment start = beginning, or after ; & | $( `
-SEG='(^|[;&|]|\$\(|`)[[:space:]]*(sudo[[:space:]]+)?'
-
 # Drop quoted spans ONCE, up front: a command name OR a `>` inside quotes is DATA
 # (a grep pattern like 'a|rm -rf|b', an awk '>' compare), not a command or a
 # redirect — read-only checkers grep such source constantly, and matching the

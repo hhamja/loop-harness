@@ -10,6 +10,12 @@
 
 LOOP_DIR=".claude/loop"
 
+# SEG — command-segment start for the gate regexes: beginning, or after ; & | $( `
+# (optionally sudo-prefixed). Shared by verifier_guard AND decision_gate so the
+# two gates can never disagree on where a command begins.
+# shellcheck disable=SC2034  # consumed by sourcing gate scripts
+SEG='(^|[;&|]|\$\(|`)[[:space:]]*(sudo[[:space:]]+)?'
+
 # json_str <key> — first top-level string field from INPUT (crude sed; fine
 # for the machine-written cwd/session_id/transcript_path fields).
 json_str() {
