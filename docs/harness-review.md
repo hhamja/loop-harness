@@ -4,6 +4,22 @@
 >
 > This pass runs against a **live shared worktree** — a concurrent session committed `9282328` ("refactor: dedup shared parses … ponytail review") mid-review, which restored the fail-closed clock guard that had transiently regressed. The auditor and loop-architect both observed `187 passed, 1 failed`; at committed HEAD the orchestrator's full-permission run is **`188 passed, 0 failed`** (that failure was a transient WIP + a subagent-sandbox `date`-shim limitation, now moot). The three prior-pass honest-agent bugs (`rm -rf /*` under-match, `HEAD:refs/heads/main` protected push, clock fail-open) are all **FIXED and pinned** by golden tests. This pass surfaces **three NEW honest-agent holes** in the same gate scripts.
 
+> **Follow-up 2026-07-11 — branch `review/harness-review-fixes`** (triggered by a
+> vibe-expo `/loopy:loop-review` pass that re-derived these holes from a consumer's
+> vantage): items 1–2 below are FIXED with regression tests — multi-operand `rm`
+> (`decision_gate.sh`) and the verifier_guard quoted-pattern strip. A new
+> `scripts/tamper_gate.sh` (PreToolUse `Edit|Write|NotebookEdit`) closes the
+> test/CI/gate/rubric **diff-path** hole (review item 5) AND the Write-tool
+> `.gate-approved` forgery: an Edit/Write of a verifier-input or gate path is now
+> a T2 backstop, and `.gate-approved` with an empty `session_id` fails closed. The
+> marker-approval logic moved to `hook_lib.sh:gate_approved` so decision_gate and
+> tamper_gate cannot drift. **Still accepted-by-design (`0faabb4`)**: command-form
+> bypasses (env-prefix, `git -C`, `gh api …/merge`) and interpreter escapes — the
+> latter deliberately, since a denylist that blocks `python -c` also blocks a
+> checker's legitimate read-only analysis (net-negative). tamper_gate is a
+> diff-path backstop, not a sandbox: a Bash redirect/interpreter still reaches
+> those paths. Holdout suite (the L3→L4 cap) unchanged. Suite: 212/0.
+
 ## ETCLOVG coverage
 
 | | Responsibility | Verdict | Evidence |

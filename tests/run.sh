@@ -73,6 +73,22 @@ test_verifier_guard() {
   out="$(guard '{"agent_type":"verifier","tool_input":{"command":"awk '\''{if ($1 > 5) print}'\'' f"}}')"
   assert_empty "$out" "verifier awk > compare in quotes: allow"
 
+  # a command name inside a quoted pattern is DATA, not a command: a read-only
+  # checker grepping source for a dangerous string must be ALLOWED (quoted-pattern
+  # false-positive — the checker's own audit greps were being blocked).
+  out="$(guard '{"agent_type":"verifier","tool_input":{"command":"grep -rn '\''a|rm -rf|b'\'' src"}}')"
+  assert_empty "$out" "verifier grep quoted-pattern with rm: allow"
+
+  out="$(guard '{"agent_type":"loopy:auditor","tool_input":{"command":"grep -E '\''x|cp f|y'\'' log"}}')"
+  assert_empty "$out" "auditor grep quoted-pattern with cp: allow"
+
+  out="$(guard '{"agent_type":"design-critic","tool_input":{"command":"grep -rn '\''git commit'\'' scripts"}}')"
+  assert_empty "$out" "critic grep quoted-pattern with git: allow"
+
+  # but a BARE (unquoted) mutation is still denied — the fix must stay surgical
+  out="$(guard '{"agent_type":"verifier","tool_input":{"command":"rm -rf x"}}')"
+  assert_contains "$out" '"deny"' "verifier bare rm still denied (quoted-pattern fix is surgical)"
+
   out="$(guard '{"agent_type":"verifier","tool_input":{"command":"pnpm test 2>&1"}}')"
   assert_empty "$out" "verifier test 2>&1: allow (idiom)"
 
@@ -226,6 +242,22 @@ test_decision_gate() {
   out="$(dgate "$tmp" "rm -rf node_modules")"
   assert_empty "$out" "rm local dir: allow"
 
+  # multi-operand: a root/home target in a LATER operand position must still gate
+  out="$(dgate "$tmp" "rm -rf ./dist /")"
+  assert_contains "$out" '"deny"' "multi-operand rm ending in /: deny (honest stray-space footgun)"
+
+  out="$(dgate "$tmp" "rm -rf /tmp/x /")"
+  assert_contains "$out" '"deny"' "multi-operand rm with trailing /: deny"
+
+  out="$(dgate "$tmp" "rm -rf ./build ~")"
+  assert_contains "$out" '"deny"' "multi-operand rm ending in ~: deny"
+
+  out="$(dgate "$tmp" "rm -rf ./a ./b ./c")"
+  assert_empty "$out" "multi-operand all-safe rm: allow (no regression)"
+
+  out="$(dgate "$tmp" "rm -rf /tmp/build")"
+  assert_empty "$out" "single safe absolute path: allow (no regression)"
+
   out="$(dgate "$tmp" "git push origin mainline")"
   assert_empty "$out" "push to mainline (not protected): allow"
 
@@ -263,6 +295,16 @@ test_decision_gate() {
   out="$(dgate "$tmp" "git push origin main")"
   assert_contains "$out" '"deny"' "wrong-session marker: deny"
 
+  # a marker with an empty session_id must fail closed (forgery guard)
+  printf 'action=push\nsession_id=\nts=%s\n' "$(date +%s)" > "$tmp/.claude/loop/.gate-approved"
+  out="$(dgate "$tmp" "git push origin main")"
+  assert_contains "$out" '"deny"' "empty session_id marker: deny (fail closed)"
+
+  # a marker missing the session_id field entirely: same fail-closed
+  printf 'action=push\nts=%s\n' "$(date +%s)" > "$tmp/.claude/loop/.gate-approved"
+  out="$(dgate "$tmp" "git push origin main")"
+  assert_contains "$out" '"deny"' "missing session_id field: deny (fail closed)"
+
   # unreadable clock (date +%s -> 0) must fail CLOSED: cannot verify marker freshness
   mkdir -p "$tmp/bin"
   # shellcheck disable=SC2016  # $1/$@ are literals for the shim script written to disk
@@ -271,6 +313,57 @@ test_decision_gate() {
   printf 'action=push\nsession_id=S1\nts=1000000000\n' > "$tmp/.claude/loop/.gate-approved"
   out="$(printf '{"cwd":"%s","session_id":"S1","tool_input":{"command":"git push origin main"}}' "$tmp" | PATH="$tmp/bin:$PATH" bash "$SCRIPTS/decision_gate.sh")"
   assert_contains "$out" '"deny"' "unreadable clock + old marker: fail closed (deny)"
+
+  rm -rf "$tmp"
+}
+
+# ── tamper_gate.sh: Edit/Write of a verifier-input / gate path -> deny (T2) ──
+tgate() { printf '{"cwd":"%s","session_id":"S1","tool_input":{"file_path":"%s"}}' "$1" "$2" | bash "$SCRIPTS/tamper_gate.sh"; }
+
+test_tamper_gate() {
+  printf '\ntamper_gate.sh\n'
+  local out tmp
+  tmp="$(mktemp -d)"; mkdir -p "$tmp/.claude/loop"
+
+  # protected diff paths -> deny (the maker must not edit what the verifier grades)
+  out="$(tgate "$tmp" "tests/run.sh")"
+  assert_contains "$out" '"deny"' "edit tests/: deny (verifier input)"
+  out="$(tgate "$tmp" ".github/workflows/ci.yml")"
+  assert_contains "$out" '"deny"' "edit CI workflow: deny"
+  out="$(tgate "$tmp" "scripts/decision_gate.sh")"
+  assert_contains "$out" '"deny"' "edit a gate script: deny"
+  out="$(tgate "$tmp" "hooks/hooks.json")"
+  assert_contains "$out" '"deny"' "edit hooks.json: deny"
+  out="$(tgate "$tmp" ".claude/loop/rubric.md")"
+  assert_contains "$out" '"deny"' "edit rubric: deny (grading criteria)"
+  out="$(tgate "$tmp" ".claude/loop/.gate-approved")"
+  assert_contains "$out" '"deny"' "edit the approval marker itself: deny (forgery)"
+
+  # absolute path inside the project root -> normalized, still deny
+  out="$(tgate "$tmp" "$tmp/tests/run.sh")"
+  assert_contains "$out" '"deny"' "edit tests/ by absolute path: deny"
+
+  # non-protected paths -> allow
+  out="$(tgate "$tmp" "src/app.ts")"
+  assert_empty "$out" "edit product source: allow"
+  out="$(tgate "$tmp" "README.md")"
+  assert_empty "$out" "edit docs: allow"
+  out="$(tgate "$tmp" ".claude/loop/state.md")"
+  assert_empty "$out" "edit state.md: allow (not a grading input)"
+
+  # NotebookEdit carries notebook_path, not file_path
+  out="$(printf '{"cwd":"%s","session_id":"S1","tool_input":{"notebook_path":"scripts/x.sh"}}' "$tmp" | bash "$SCRIPTS/tamper_gate.sh")"
+  assert_contains "$out" '"deny"' "notebook_path into scripts/: deny"
+
+  # a valid human approval marker (action=tamper, session-bound) bypasses
+  printf 'action=tamper\nsession_id=S1\nts=%s\n' "$(date +%s)" > "$tmp/.claude/loop/.gate-approved"
+  out="$(tgate "$tmp" "tests/run.sh")"
+  assert_empty "$out" "approved tamper: allow"
+  rm -f "$tmp/.claude/loop/.gate-approved"
+
+  # no path field -> allow (parse doubt fails open)
+  out="$(printf '{"cwd":"%s","session_id":"S1","tool_input":{}}' "$tmp" | bash "$SCRIPTS/tamper_gate.sh")"
+  assert_empty "$out" "no path: allow (fail open)"
 
   rm -rf "$tmp"
 }
@@ -1008,6 +1101,7 @@ test_loop_reminder() {
 
 test_verifier_guard
 test_decision_gate
+test_tamper_gate
 test_loop_reminder
 test_stop_gate
 test_check_memory

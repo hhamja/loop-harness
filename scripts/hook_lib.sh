@@ -121,3 +121,28 @@ protected_re() {
   [ -n "$re" ] || re="main|master"
   printf '%s' "$re"
 }
+
+# gate_approved <class> — true iff .claude/loop/.gate-approved authorizes <class>
+# (or "any") for THIS session within the 15-min TTL. Fail-closed on ANY parse
+# doubt (return 1 -> still gated). Shared by decision_gate AND tamper_gate so the
+# one human-approval contract cannot drift between them. Reads CUR_SID from the
+# caller's scope (the current session id).
+gate_approved() {
+  local mk="$LOOP_DIR/.gate-approved" a s t now
+  [ -f "$mk" ] || return 1
+  a="$(field "$mk" action)"; s="$(field "$mk" session_id)"; t="$(field "$mk" ts)"
+  case "$a" in "$1"|any) : ;; *) return 1 ;; esac
+  # a marker MUST be session-bound: an empty session_id fails closed so a forged
+  # marker cannot authorize an arbitrary session (was: empty s skipped the check).
+  [ -n "$s" ] || return 1
+  if [ -n "${CUR_SID:-}" ] && [ "$CUR_SID" != "unknown" ] && [ "$s" != "$CUR_SID" ]; then
+    return 1
+  fi
+  # freshness (15 min); missing/garbage ts -> expired. A zeroed/broken clock makes
+  # now-ts hugely negative and would keep an expired marker "fresh" -> fail closed.
+  case "$t" in ''|*[!0-9]*) return 1 ;; esac
+  now="$(date +%s 2>/dev/null || echo 0)"
+  [ "$now" -gt 0 ] || return 1
+  [ $((now - t)) -le 900 ] || return 1
+  return 0
+}

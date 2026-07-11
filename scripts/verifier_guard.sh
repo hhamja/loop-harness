@@ -44,28 +44,33 @@ deny() {
 # segment start = beginning, or after ; & | $( `
 SEG='(^|[;&|]|\$\(|`)[[:space:]]*(sudo[[:space:]]+)?'
 
-if printf '%s' "$CMD" | grep -Eq "${SEG}(rm|mv|cp|ln|dd|truncate|tee|chmod|chown|rmdir|unlink)([[:space:]]|\$)"; then
+# Drop quoted spans ONCE, up front: a command name OR a `>` inside quotes is DATA
+# (a grep pattern like 'a|rm -rf|b', an awk '>' compare), not a command or a
+# redirect — read-only checkers grep such source constantly, and matching the
+# raw command false-positives on their own patterns. Every match below runs
+# against this quote-stripped form.
+NQ="$(printf '%s' "$CMD" | sed -E "s/'[^']*'//g; s/\"[^\"]*\"//g")"
+
+if printf '%s' "$NQ" | grep -Eq "${SEG}(rm|mv|cp|ln|dd|truncate|tee|chmod|chown|rmdir|unlink)([[:space:]]|\$)"; then
   deny "file-mutating command"
 fi
 
-if printf '%s' "$CMD" | grep -Eq "${SEG}sed[[:space:]]+(-[a-zA-Z]+[[:space:]]+)*-[a-zA-Z]*i"; then
+if printf '%s' "$NQ" | grep -Eq "${SEG}sed[[:space:]]+(-[a-zA-Z]+[[:space:]]+)*-[a-zA-Z]*i"; then
   deny "sed -i"
 fi
 
-if printf '%s' "$CMD" | grep -Eq "${SEG}git[[:space:]]+(-[^[:space:]]+[[:space:]]+)*(commit|push|checkout|reset|clean|restore|rebase|merge|apply|stash|rm|mv)([[:space:]]|\$)"; then
+if printf '%s' "$NQ" | grep -Eq "${SEG}git[[:space:]]+(-[^[:space:]]+[[:space:]]+)*(commit|push|checkout|reset|clean|restore|rebase|merge|apply|stash|rm|mv)([[:space:]]|\$)"; then
   deny "git write command"
 fi
 
-if printf '%s' "$CMD" | grep -Eq "${SEG}(npm|pnpm|yarn)[[:space:]]+publish"; then
+if printf '%s' "$NQ" | grep -Eq "${SEG}(npm|pnpm|yarn)[[:space:]]+publish"; then
   deny "package publish"
 fi
 
-# Redirects: a real redirect operator is never inside quotes, so drop quoted
-# spans first — a `>` inside them is data (a grep pattern like `=>`/`->`, an awk
-# `>` compare), not a redirect, and read-only checkers grep such source all the
-# time. Then strip the allowed idioms (2>&1, >&2, [n]>/dev/null, &>/dev/null).
-# Any remaining `>` is a redirect to a file path -> deny.
-STRIPPED="$(printf '%s' "$CMD" | sed -E "s/'[^']*'//g; s/\"[^\"]*\"//g; s/[0-9]?>&[0-9]//g; s/&>[[:space:]]*\/dev\/null//g; s/[0-9]?>>?[[:space:]]*\/dev\/null//g")"
+# Redirects: quoted spans already dropped above. Strip the allowed idioms
+# (2>&1, >&2, [n]>/dev/null, &>/dev/null); any remaining `>` is a redirect to a
+# file path -> deny.
+STRIPPED="$(printf '%s' "$NQ" | sed -E "s/[0-9]?>&[0-9]//g; s/&>[[:space:]]*\/dev\/null//g; s/[0-9]?>>?[[:space:]]*\/dev\/null//g")"
 if printf '%s' "$STRIPPED" | grep -q '>'; then
   deny "file redirect"
 fi

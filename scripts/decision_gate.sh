@@ -51,26 +51,9 @@ case "$EXTRA_GATES" in TODO*|'<'*) EXTRA_GATES="" ;; esac
 PROT_RE="$(protected_re)"
 
 # --- one-shot human-approval marker ---
-# approved <class>: true if .gate-approved authorizes this class (or "any") for this
-# session within the TTL. Fail-closed on any parse doubt (return 1 -> still gated).
-approved() {
-  mk="$LOOP_DIR/.gate-approved"
-  [ -f "$mk" ] || return 1
-  a="$(field "$mk" action)"; s="$(field "$mk" session_id)"; t="$(field "$mk" ts)"
-  case "$a" in "$1"|any) : ;; *) return 1 ;; esac
-  # session must match when both sides are known
-  if [ -n "$CUR_SID" ] && [ "$CUR_SID" != "unknown" ] && [ -n "$s" ] && [ "$s" != "$CUR_SID" ]; then
-    return 1
-  fi
-  # freshness (15 min); missing/garbage ts -> treat as expired
-  case "$t" in ''|*[!0-9]*) return 1 ;; esac
-  now="$(date +%s 2>/dev/null || echo 0)"
-  # a zeroed/broken clock makes now-ts hugely negative and an expired marker
-  # eternally "fresh" -> fail closed (golden test pins this)
-  [ "$now" -gt 0 ] || return 1
-  [ $((now - t)) -le 900 ] || return 1
-  return 0
-}
+# gate_approved (hook_lib.sh) decides whether .gate-approved authorizes a class
+# for this session within the TTL — shared with tamper_gate so the approval
+# contract can't drift between the two gates.
 
 deny() {
   # $1 = fixed tag, $2 = action class — both chosen below, safe to interpolate.
@@ -79,7 +62,7 @@ deny() {
 }
 
 # gate <class> <tag>: block unless the human approved this class.
-gate() { approved "$1" || deny "$2" "$1"; }
+gate() { gate_approved "$1" || deny "$2" "$1"; }
 
 # segment start = beginning, or after ; & | $( `
 SEG='(^|[;&|]|\$\(|`)[[:space:]]*(sudo[[:space:]]+)?'
@@ -136,8 +119,11 @@ fi
 #   /         : root — trailing space, '/', '*', or end     (rm -rf /, //, /*)
 #   ~ /$HOME  : whole home only — optional single trailing '/' then space/end
 #               (rm -rf ~, ~/, $HOME) but NOT ~/<subdir>
+# The root/home target may sit in ANY operand position, not just first after the
+# flags — `(...[[:space:]]+)?` skips leading safe operands so `rm -rf ./dist /`
+# and a later `$VAR` expanding to `/` are still caught (honest stray-space footgun).
 CATA_TGT='(/([[:space:]]|/|[*]|$)|(~|[$]HOME|[$][{]HOME[}])/?([[:space:]]|$))'
-if printf '%s' "$CMD" | grep -Eq "${SEG}rm[[:space:]]+(-[a-zA-Z]*[[:space:]]+)*-[a-zA-Z]*([rR][a-zA-Z]*[fF]|[fF][a-zA-Z]*[rR])[a-zA-Z]*[[:space:]]+${CATA_TGT}"; then
+if printf '%s' "$CMD" | grep -Eq "${SEG}rm[[:space:]]+(-[a-zA-Z]*[[:space:]]+)*-[a-zA-Z]*([rR][a-zA-Z]*[fF]|[fF][a-zA-Z]*[rR])[a-zA-Z]*[[:space:]]+([^;&|]*[[:space:]]+)?${CATA_TGT}"; then
   gate destructive "catastrophic rm -rf/-fr"
 fi
 
